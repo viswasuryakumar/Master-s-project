@@ -80,3 +80,34 @@ def stack_and_pad_left(tensors):
 
 def stack_and_pad_right(tensors):
     return _stack_and_pad(tensors, padding_side='right')
+
+
+
+def build_quantization_config():
+    from transformers import BitsAndBytesConfig
+
+    return BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_use_double_quant=False,
+        bnb_4bit_quant_type='nf4',
+        bnb_4bit_compute_dtype=torch.bfloat16,
+    )
+
+
+class LogAnomalyModel(torch.nn.Module):
+    def __init__(
+        self, Bert_path, Llama_path, ft_path=None, is_train_mode=True,
+        device=torch.device('cuda:0'), max_content_len=128, max_seq_len=128,
+    ):
+        super().__init__()
+
+        if max_content_len <= 0 or max_seq_len <= 0:
+            raise ValueError('Content and sequence length limits must be positive.')
+
+        self.Bert_path = Bert_path
+        self.Llama_path = Llama_path
+        self.ft_path = ft_path
+        self.is_train_mode = is_train_mode
+        self.max_content_len = max_content_len
+        self.max_seq_len = max_seq_len
+        self.device = torch.device(device)
