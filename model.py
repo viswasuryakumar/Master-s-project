@@ -111,3 +111,19 @@ class LogAnomalyModel(torch.nn.Module):
         self.max_content_len = max_content_len
         self.max_seq_len = max_seq_len
         self.device = torch.device(device)
+
+        self.load_tokenizers()
+
+    def load_tokenizers(self):
+        from transformers import AutoTokenizer, BertTokenizerFast
+
+        self.Llama_tokenizer = AutoTokenizer.from_pretrained(
+            self.Llama_path, padding_side='right',
+        )
+        if self.Llama_tokenizer.eos_token is None:
+            raise ValueError('The Llama tokenizer must define an end-of-sequence token.')
+        self.Llama_tokenizer.pad_token = self.Llama_tokenizer.eos_token
+
+        self.Bert_tokenizer = BertTokenizerFast.from_pretrained(
+            self.Bert_path, do_lower_case=True,
+        )
