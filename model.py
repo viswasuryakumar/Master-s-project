@@ -113,6 +113,7 @@ class LogAnomalyModel(torch.nn.Module):
         self.device = torch.device(device)
 
         self.load_tokenizers()
+        self.load_models()
 
     def load_tokenizers(self):
         from transformers import AutoTokenizer, BertTokenizerFast
@@ -126,4 +127,25 @@ class LogAnomalyModel(torch.nn.Module):
 
         self.Bert_tokenizer = BertTokenizerFast.from_pretrained(
             self.Bert_path, do_lower_case=True,
+        )
+
+    def load_models(self):
+        from transformers import AutoModelForCausalLM, BertModel
+
+        self.model_dtype = (
+            torch.float32 if self.device.type == 'cpu' else torch.float16
+        )
+        load_options = {
+            'low_cpu_mem_usage': True,
+            'device_map': self.device,
+            'torch_dtype': self.model_dtype,
+        }
+        if self.device.type == 'cuda':
+            load_options['quantization_config'] = build_quantization_config()
+
+        self.Llama_model = AutoModelForCausalLM.from_pretrained(
+            self.Llama_path, **load_options,
+        )
+        self.Bert_model = BertModel.from_pretrained(
+            self.Bert_path, **load_options,
         )
