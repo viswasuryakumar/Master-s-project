@@ -114,6 +114,7 @@ class LogAnomalyModel(torch.nn.Module):
 
         self.load_tokenizers()
         self.load_models()
+        self.initialize_projection()
 
     def load_tokenizers(self):
         from transformers import AutoTokenizer, BertTokenizerFast
@@ -149,3 +150,18 @@ class LogAnomalyModel(torch.nn.Module):
         self.Bert_model = BertModel.from_pretrained(
             self.Bert_path, **load_options,
         )
+
+    def initialize_projection(self):
+        self.projector = torch.nn.Linear(
+            self.Bert_model.config.hidden_size,
+            self.Llama_model.config.hidden_size,
+            device=self.device,
+            dtype=torch.float32,
+        )
+        self.instruc_tokens = self.Llama_tokenizer(
+            [
+                'Below is a sequence of system log messages:',
+                '. Is this sequence normal or anomalous? \n',
+            ],
+            return_tensors='pt', padding=True,
+        ).to(self.device)
