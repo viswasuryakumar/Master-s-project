@@ -115,6 +115,7 @@ class LogAnomalyModel(torch.nn.Module):
         self.load_tokenizers()
         self.load_models()
         self.initialize_projection()
+        self.load_adapters()
 
     def load_tokenizers(self):
         from transformers import AutoTokenizer, BertTokenizerFast
@@ -165,3 +166,37 @@ class LogAnomalyModel(torch.nn.Module):
             ],
             return_tensors='pt', padding=True,
         ).to(self.device)
+
+    def load_adapters(self):
+        from pathlib import Path
+        from peft import LoraConfig, PeftModel, TaskType, get_peft_model
+
+        if self.ft_path is None:
+            bert_config = LoraConfig(
+                task_type=TaskType.FEATURE_EXTRACTION,
+                r=4, lora_alpha=32, lora_dropout=0.01,
+            )
+            llama_config = LoraConfig(
+                task_type=TaskType.CAUSAL_LM,
+                r=8, lora_alpha=16, lora_dropout=0.1,
+                target_modules=['q_proj', 'v_proj'], bias='none',
+            )
+            self.Bert_model = get_peft_model(self.Bert_model, bert_config)
+            self.Llama_model = get_peft_model(self.Llama_model, llama_config)
+        else:
+            checkpoint = Path(self.ft_path)
+            self.Bert_model = PeftModel.from_pretrained(
+                self.Bert_model, str(checkpoint / 'Bert_ft'),
+                is_trainable=self.is_train_mode,
+                torch_dtype=self.model_dtype,
+            )
+            self.Llama_model = PeftModel.from_pretrained(
+                self.Llama_model, str(checkpoint / 'Llama_ft'),
+                is_trainable=self.is_train_mode,
+                torch_dtype=self.model_dtype,
+            )
+            projector_state = torch.load(
+                checkpoint / 'projector.pt',
+                map_location=self.device, weights_only=True,
+            )
+            self.projector.load_state_dict(projector_state)
