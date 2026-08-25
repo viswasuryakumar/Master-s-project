@@ -200,3 +200,16 @@ class LogAnomalyModel(torch.nn.Module):
                 map_location=self.device, weights_only=True,
             )
             self.projector.load_state_dict(projector_state)
+
+    def save_ft_model(self, path):
+        from pathlib import Path
+
+        destination = Path(path)
+        destination.mkdir(parents=True, exist_ok=True)
+        self.Llama_model.save_pretrained(
+            destination / 'Llama_ft', safe_serialization=True,
+        )
+        self.Bert_model.save_pretrained(
+            destination / 'Bert_ft', safe_serialization=True,
+        )
+        torch.save(self.projector.state_dict(), destination / 'projector.pt')
