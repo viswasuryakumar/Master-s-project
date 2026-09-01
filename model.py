@@ -213,3 +213,23 @@ class LogAnomalyModel(torch.nn.Module):
             destination / 'Bert_ft', safe_serialization=True,
         )
         torch.save(self.projector.state_dict(), destination / 'projector.pt')
+
+    def _set_trainable_components(self, projector, bert, llama):
+        for parameter in self.projector.parameters():
+            parameter.requires_grad = projector
+        for name, parameter in self.Bert_model.named_parameters():
+            parameter.requires_grad = bert and 'lora_' in name
+        for name, parameter in self.Llama_model.named_parameters():
+            parameter.requires_grad = llama and 'lora_' in name
+
+    def set_train_only_projector(self):
+        self._set_trainable_components(projector=True, bert=False, llama=False)
+
+    def set_train_only_Llama(self):
+        self._set_trainable_components(projector=False, bert=False, llama=True)
+
+    def set_train_projectorAndBert(self):
+        self._set_trainable_components(projector=True, bert=True, llama=False)
+
+    def set_finetuning_all(self):
+        self._set_trainable_components(projector=True, bert=True, llama=True)
