@@ -233,3 +233,56 @@ class LogAnomalyModel(torch.nn.Module):
 
     def set_finetuning_all(self):
         self._set_trainable_components(projector=True, bert=True, llama=True)
+
+    def train_helper(self, inputs, seq_positions, labels):
+        labels = [str(label) for label in labels]
+        if not labels or any(label not in ('normal', 'anomalous') for label in labels):
+            raise ValueError('Training labels must be normal or anomalous.')
+        if len(seq_positions) + 1 != len(labels):
+            raise ValueError('Sequence boundaries and labels must describe the same batch.')
+
+        embedding_layer = self.Llama_model.get_input_embeddings()
+        encoded = self.Bert_model(**inputs).pooler_output
+        projected = self.projector(encoded.to(dtype=self.projector.weight.dtype))
+        sequences = torch.tensor_split(
+            projected.to(dtype=embedding_layer.weight.dtype), seq_positions,
+        )
+        instruction_embeddings = embedding_layer(self.instruc_tokens['input_ids'])
+        prefix_mask = self.instruc_tokens['attention_mask'][0].bool()
+        question_mask = self.instruc_tokens['attention_mask'][1].bool()
+        prefix = instruction_embeddings[0][prefix_mask]
+        question = instruction_embeddings[1][question_mask]
+        question_ids = self.instruc_tokens['input_ids'][1][question_mask]
+        bos_token_id = self.Llama_tokenizer.bos_token_id
+        if bos_token_id is not None and question_ids[0].item() == bos_token_id:
+            question = question[1:]
+
+        answer_tokens = self.Llama_tokenizer(
+            [f'The sequence is {label}.' for label in labels],
+            padding=True, return_tensors='pt', add_special_tokens=False,
+        ).to(self.device)
+        eos = torch.tensor(
+            [self.Llama_tokenizer.eos_token_id], dtype=torch.long, device=self.device,
+        )
+        embeddings = []
+        targets = []
+        prompt_lengths = []
+        for index, sequence in enumerate(sequences):
+            answer_mask = answer_tokens['attention_mask'][index].bool()
+            answer_ids = answer_tokens['input_ids'][index][answer_mask]
+            prompt = torch.cat([prefix, sequence, question])
+            embeddings.append(torch.cat([prompt, embedding_layer(answer_ids)]))
+            targets.append(torch.cat([answer_ids, eos]))
+            prompt_lengths.append(prompt.shape[0])
+
+        inputs_embeds, attention_mask = stack_and_pad_left(embeddings)
+        logits = self.Llama_model(
+            inputs_embeds=inputs_embeds, attention_mask=attention_mask,
+        ).logits
+        selected_logits = []
+        for index, prompt_length in enumerate(prompt_lengths):
+            padding_length = inputs_embeds.shape[1] - embeddings[index].shape[0]
+            start = padding_length + prompt_length - 1
+            end = padding_length + embeddings[index].shape[0]
+            selected_logits.append(logits[index, start:end])
+        return torch.cat(selected_logits), torch.cat(targets)
