@@ -286,3 +286,71 @@ class LogAnomalyModel(torch.nn.Module):
             end = padding_length + embeddings[index].shape[0]
             selected_logits.append(logits[index, start:end])
         return torch.cat(selected_logits), torch.cat(targets)
+
+    def forward(self, inputs, seq_positions):
+        from transformers import DynamicCache
+
+        embedding_layer = self.Llama_model.get_input_embeddings()
+        encoded = self.Bert_model(**inputs).pooler_output
+        projected = self.projector(encoded.to(dtype=self.projector.weight.dtype))
+        sequences = torch.tensor_split(
+            projected.to(dtype=embedding_layer.weight.dtype), seq_positions,
+        )
+        instruction_embeddings = embedding_layer(self.instruc_tokens['input_ids'])
+        prefix_mask = self.instruc_tokens['attention_mask'][0].bool()
+        question_mask = self.instruc_tokens['attention_mask'][1].bool()
+        prefix = instruction_embeddings[0][prefix_mask]
+        question = instruction_embeddings[1][question_mask]
+        question_ids = self.instruc_tokens['input_ids'][1][question_mask]
+        bos_token_id = self.Llama_tokenizer.bos_token_id
+        if bos_token_id is not None and question_ids[0].item() == bos_token_id:
+            question = question[1:]
+
+        answer_prefix_ids = self.Llama_tokenizer(
+            'The sequence is', add_special_tokens=False, return_tensors='pt',
+        )['input_ids'][0].to(self.device)
+        answer_prefix = embedding_layer(answer_prefix_ids)
+        prompts = [
+            torch.cat([prefix, sequence, question, answer_prefix])
+            for sequence in sequences
+        ]
+        inputs_embeds, attention_mask = stack_and_pad_left(prompts)
+        batch_size = len(sequences)
+        unfinished = torch.ones(batch_size, dtype=torch.bool, device=self.device)
+        eos_tokens = torch.as_tensor(
+            self.Llama_tokenizer.eos_token_id, device=self.device,
+        ).reshape(-1)
+        pad_token_id = self.Llama_tokenizer.pad_token_id
+        cache = DynamicCache()
+        answer = []
+
+        for step in range(6):
+            position_ids = attention_mask.long().cumsum(dim=-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 0)
+            if step == 0:
+                current_embeddings = inputs_embeds
+            else:
+                current_embeddings = embedding_layer(next_tokens).unsqueeze(1)
+                position_ids = position_ids[:, -1:]
+
+            outputs = self.Llama_model(
+                inputs_embeds=current_embeddings,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_values=cache,
+                use_cache=True,
+            )
+            cache = outputs.past_key_values
+            next_tokens = outputs.logits[:, -1, :].argmax(dim=-1)
+            next_tokens = torch.where(unfinished, next_tokens, pad_token_id)
+            answer.append(next_tokens)
+            attention_mask = torch.cat(
+                [attention_mask, unfinished.long().unsqueeze(1)], dim=1,
+            )
+            unfinished = unfinished & (
+                next_tokens.unsqueeze(1) != eos_tokens.unsqueeze(0)
+            ).all(dim=1)
+            if not unfinished.any():
+                break
+
+        return torch.stack(answer, dim=1)
