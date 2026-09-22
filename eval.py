@@ -1,4 +1,3 @@
-"""Evaluate existing LogLLM checkpoints, including on Apple Silicon."""
 import argparse
 import csv
 import json
@@ -41,7 +40,6 @@ def evalModel(model, dataloader, device=None, output_dir=None, trace_output=None
                 if trace is not None:
                     trace.close()
             for text in outputs:
-                # Never silently count an unparseable response as normal.
                 preds.append(parse_prediction(text))
                 responses.append(text)
             if trace is not None:
@@ -71,7 +69,7 @@ def evalModel(model, dataloader, device=None, output_dir=None, trace_output=None
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description="Evaluate log anomaly checkpoints.")
     parser.add_argument("--dataset", choices=["BGL", "HDFS", "Liberty", "Thunderbird"], default="BGL")
     parser.add_argument("--data", type=Path, help="Prepared CSV with Content and binary Label columns")
     parser.add_argument("--bert-path", type=Path, default=ROOT_DIR / "models/bert-base-uncased")
@@ -119,8 +117,8 @@ def main():
         parser.error("CUDA is unavailable on this machine.")
     device = torch.device(device_name)
     print(f"Dataset: {args.dataset}; device: {device}; sequences: {len(dataset)}; batch size: {args.batch_size}", flush=True)
-    from model import LogLLM
-    model = LogLLM(str(args.bert_path), str(args.llama_path), ft_path=str(checkpoint),
+    from model import LogAnomalyModel
+    model = LogAnomalyModel(str(args.bert_path), str(args.llama_path), ft_path=str(checkpoint),
                    is_train_mode=False, device=device,
                    max_content_len=args.max_content_len, max_seq_len=args.max_seq_len)
     collator = CustomCollator(model.Bert_tokenizer, max_seq_len=args.max_seq_len,
