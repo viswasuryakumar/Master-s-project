@@ -34,3 +34,18 @@ class CustomDataset(Dataset):
 
     def get_label(self):
         return self.labels
+
+
+def merge_data(data):
+    merged_data = []
+
+    # 记录每个子列表的开始位置
+    start_positions = []
+
+    current_position = 0
+    for sublist in data:
+        start_positions.append(current_position)
+        merged_data.extend(sublist)
+        current_position += len(sublist)
+
+    return merged_data, start_positions
