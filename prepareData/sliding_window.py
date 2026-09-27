@@ -3,7 +3,10 @@ import os.path
 
 import numpy as np
 import pandas as pd
-from helper import sliding_window, fixedSize_window, structure_log
+if __package__:
+    from .helper import sliding_window, fixedSize_window, structure_log
+else:
+    from helper import sliding_window, fixedSize_window, structure_log
 
 #### for Thunderbird, Liberty, BGL
 
