@@ -83,14 +83,14 @@ def stack_and_pad_right(tensors):
 
 
 
-def build_quantization_config():
+def build_quantization_config(compute_dtype=torch.bfloat16):
     from transformers import BitsAndBytesConfig
 
     return BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_use_double_quant=False,
         bnb_4bit_quant_type='nf4',
-        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_compute_dtype=compute_dtype,
     )
 
 
@@ -139,11 +139,19 @@ class LogAnomalyModel(torch.nn.Module):
         )
         load_options = {
             'low_cpu_mem_usage': True,
-            'device_map': self.device,
+            'device_map': (
+                self.device if self.device.type == 'cpu'
+                else {'': str(self.device)}
+            ),
             'torch_dtype': self.model_dtype,
         }
-        if self.device.type == 'cuda':
-            load_options['quantization_config'] = build_quantization_config()
+        if self.device.type in ('cuda', 'mps'):
+            compute_dtype = (
+                torch.float16 if self.device.type == 'mps' else torch.bfloat16
+            )
+            load_options['quantization_config'] = build_quantization_config(
+                compute_dtype=compute_dtype,
+            )
 
         self.Llama_model = AutoModelForCausalLM.from_pretrained(
             self.Llama_path, **load_options,

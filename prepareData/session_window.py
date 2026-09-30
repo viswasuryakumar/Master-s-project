@@ -14,7 +14,7 @@ output_dir = data_dir
 
 
 if __name__ == '__main__':
-    log_format = '<Date> <Time> <Pid> <Level> <Component>: <Content>'  # HDFS log format
+    log_format = '<Date> <Time> <Pid> <Level> <Component>: <Content>'
     structure_log(data_dir, output_dir, log_name, log_format)
 
     spliter = ' ;-; '
@@ -26,9 +26,9 @@ if __name__ == '__main__':
             na_filter=False, memory_map=True, dtype={'Date':object, "Time": object})
 
     print(f'number of messages in {log_structured_file} is {len(df)}')
-    # df = df[:100000]
 
-    data_dict_content = defaultdict(list) #preserve insertion order of items
+
+    data_dict_content = defaultdict(list)
     for idx, row in tqdm(df.iterrows(),total=len(df)):
         blkId_list = re.findall(r'(blk_-?\d+)', row['Content'])
         blkId_set = set(blkId_list)
@@ -43,11 +43,11 @@ if __name__ == '__main__':
     for _, row in tqdm(blk_df.iterrows(),total=len(blk_df)):
         blk_label_dict[row["BlockId"]] = 1 if row["Label"] == "Anomaly" else 0
 
-    data_df["Label"] = data_df["BlockId"].apply(lambda x: blk_label_dict.get(x))  # add label to the sequence of each blockid
+    data_df["Label"] = data_df["BlockId"].apply(lambda x: blk_label_dict.get(x))
 
     train_len = int(train_ratio * len(data_df))
 
-    data_df = data_df.sample(frac=1).reset_index(drop=True)  ##shuffle
+    data_df = data_df.sample(frac=1).reset_index(drop=True)
 
     session_train_df = data_df[:train_len]
 
