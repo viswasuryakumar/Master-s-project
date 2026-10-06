@@ -72,7 +72,7 @@ def sliding_window(raw_data, para):
             print("process {} time window".format(num_session), end='\r')
 
     for (start_index, end_index) in start_end_index_pair:
-        dt = deltaT_data[start_index: end_index].values
+        dt = deltaT_data[start_index: end_index].values.copy()
         dt[0] = 0
         new_data.append([
             time_data[start_index: end_index].values,
