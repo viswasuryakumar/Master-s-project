@@ -57,4 +57,15 @@ def evalModel(model, dataloader, device=None, output_dir=None, trace_output=None
         "f1": float(f1_score(gt, preds, zero_division=0)),
     }
     print(json.dumps(metrics, indent=2))
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
+        with (output_dir / "predictions.csv").open("w", newline="") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["sequence_index", "label", "prediction", "response"])
+            writer.writerows((i, int(label), pred, response)
+                             for i, (label, pred, response) in enumerate(zip(gt, preds, responses)))
+        print(f"Saved results to {output_dir}")
     return metrics
+
