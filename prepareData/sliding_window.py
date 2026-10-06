@@ -3,13 +3,15 @@ import os.path
 
 import numpy as np
 import pandas as pd
-from helper import sliding_window, fixedSize_window, structure_log
+import argparse
+
+from prepareData.helper import sliding_window, fixedSize_window, structure_log
 
 #### for Thunderbird, Liberty, BGL
 
 
-data_dir = r'/mnt/public/gw/SyslogData/BGL'
-log_name = "BGL.log"
+DEFAULT_DATA_DIR = r'/mnt/public/gw/SyslogData/BGL'
+DEFAULT_LOG_NAME = "BGL.log"
 
 start_line = 0
 end_line = None
@@ -22,11 +24,16 @@ end_line = None
 # start_line = 160000000
 # end_line = 170000000
 
-output_dir = data_dir
-
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Build train/test windows for BGL, Liberty or Thunderbird logs.')
+    parser.add_argument('--data-dir', default=DEFAULT_DATA_DIR)
+    parser.add_argument('--log-name', default=DEFAULT_LOG_NAME)
+    args = parser.parse_args()
+    data_dir, log_name = args.data_dir, args.log_name
+    output_dir = data_dir
+
     # group_type = 'time_sliding'
 
     window_size = 100
