@@ -170,7 +170,7 @@ class LogAnomalyModel(torch.nn.Module):
         self.instruc_tokens = self.Llama_tokenizer(
             [
                 'Below is a sequence of system log messages:',
-                '. Is this sequence normal or anomalous? \n',
+                '. Is this sequence normal or anomalous? \\n',
             ],
             return_tensors='pt', padding=True,
         ).to(self.device)
@@ -332,10 +332,10 @@ class LogAnomalyModel(torch.nn.Module):
         cache = DynamicCache()
         answer = []
 
-        for step in range(6):
+        for _ in range(6):
             position_ids = attention_mask.long().cumsum(dim=-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 0)
-            if step == 0:
+            if cache.get_seq_length() == 0:
                 current_embeddings = inputs_embeds
             else:
                 current_embeddings = embedding_layer(next_tokens).unsqueeze(1)
