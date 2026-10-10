@@ -5,6 +5,7 @@ The existing module supplies normalization; the pipeline continues to use it.
 
 import numpy as np
 import pandas as pd
+import torch
 from torch.utils.data import Dataset
 
 from customDataset import replace_patterns
@@ -49,3 +50,43 @@ def merge_data(data):
         current_position += len(sublist)
 
     return merged_data, start_positions
+
+
+class CustomCollator:
+    def __init__(self, tokenizer, max_seq_len=128, max_content_len=100):
+        self.tokenizer = tokenizer
+        self.max_seq_len = max_seq_len
+        self.max_content_len = max_content_len
+
+    def __call__(self, batch):
+        sequences_, labels = zip(*batch)
+
+        # 截断每个子序列的长度
+        sequences = [seq[:self.max_seq_len] for seq in sequences_]
+
+        data, seq_positions = merge_data(sequences)
+        seq_positions = seq_positions[1:]  # 去掉第一个0位置，用于后续分界处理
+
+        # 将合并后的 data 编码
+        inputs = self.tokenizer(
+            data,
+            return_tensors="pt",
+            max_length=self.max_content_len,
+            padding=True,
+            truncation=True
+        )
+
+        # 构建 label tensor
+        # labels_tensor = torch.tensor(labels, dtype=torch.long)
+
+        labels = np.array(labels).astype(object)
+
+        labels[labels == 0] = 'normal'
+        labels[labels == 1] = 'anomalous'
+
+        return {
+            "inputs": inputs,
+            "seq_positions": torch.tensor(seq_positions, dtype=torch.long),
+            # "labels": labels_tensor
+            "labels": labels
+        }
