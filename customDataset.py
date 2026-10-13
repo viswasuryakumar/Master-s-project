@@ -8,15 +8,11 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 #
 # patterns = [
-#     r'[a-zA-Z0-9]*:*([/\\]+[^/\\\s]+)+[/\\]*',  # 文件路径
-#     r'[a-zA-Z\.\:\-\_]*\d[a-zA-Z0-9\.\:\-\_]*',  # 中间一定要有数字  数字和字母和 . 或 : 或 - 的组合
 #     # r'[a-zA-Z0-9]+\.[a-zA-Z0-9]+',
 # ]
 #
-# # 合并所有模式
 # combined_pattern = '|'.join(patterns)
 #
-# # 替换函数
 # def replace_patterns(text):
 #     return re.sub(combined_pattern, '<*>', text)
 
@@ -39,10 +35,8 @@ patterns = [
     r'[a-zA-Z\.\:\-\_]*\d[a-zA-Z0-9\.\:\-\_]*',  # word have number
 ]
 
-# 合并所有模式
 combined_pattern = '|'.join(patterns)
 
-# 替换函数
 def replace_patterns(text):
     text = re.sub(r'[\.]{3,}', '.. ', text)    # Replace multiple '.' with '.. '
     text = re.sub(combined_pattern, '<*>', text)
@@ -77,7 +71,6 @@ class CustomDataset(Dataset):
 def merge_data(data):
     merged_data = []
 
-    # 记录每个子列表的开始位置
     start_positions = []
 
     current_position = 0
@@ -160,13 +153,11 @@ class CustomCollator:
     def __call__(self, batch):
         sequences_, labels = zip(*batch)
 
-        # 截断每个子序列的长度
         sequences = [seq[:self.max_seq_len] for seq in sequences_]
 
         data, seq_positions = merge_data(sequences)
-        seq_positions = seq_positions[1:]  # 去掉第一个0位置，用于后续分界处理
+        seq_positions = seq_positions[1:]
 
-        # 将合并后的 data 编码
         inputs = self.tokenizer(
             data,
             return_tensors="pt",
@@ -175,7 +166,6 @@ class CustomCollator:
             truncation=True
         )
 
-        # 构建 label tensor
         # labels_tensor = torch.tensor(labels, dtype=torch.long)
 
         labels = np.array(labels).astype(object)
