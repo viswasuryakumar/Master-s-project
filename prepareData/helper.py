@@ -165,3 +165,26 @@ def structure_log(input_dir, output_dir, log_name, log_format,  start_line = 0, 
     df_log.to_csv(os.path.join(output_dir, log_name + '_structured.csv'), index=False, escapechar='\\')
 
     print('Structuring done. [Time taken: {!s}]'.format(datetime.now() - start_time))
+
+
+def estimate_fixed_window_count(record_count, step_size):
+    """Count fixed-size windows without loading or processing log records.
+
+    Includes partial trailing windows, matching fixedSize_window's behavior.
+    For example, ten records with a step of three produce four windows.
+    """
+    from operator import index
+
+    if isinstance(record_count, bool) or isinstance(step_size, bool):
+        raise TypeError("record_count and step_size must be integers, not booleans.")
+    try:
+        record_count = index(record_count)
+        step_size = index(step_size)
+    except TypeError:
+        raise TypeError("record_count and step_size must be integers.") from None
+    if record_count < 0:
+        raise ValueError("record_count must be nonnegative.")
+    if step_size <= 0:
+        raise ValueError("step_size must be positive.")
+
+    return (record_count + step_size - 1) // step_size
