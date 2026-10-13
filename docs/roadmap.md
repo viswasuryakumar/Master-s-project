@@ -12,8 +12,8 @@ Status values: planned / in progress / done. Update this file as work lands.
 ## Month 1 – Data quality and safety (Oct)
 | Item | Status |
 |---|---|
-| Input validation for structured logs (required columns, empty content, label values) | planned |
-| Chronological train/test split helper with a leakage check, extracted from `sliding_window.py` | planned |
+| Input validation for structured logs (required columns, empty content, label values) | done |
+| Chronological train/test split helper with a leakage check, extracted from `sliding_window.py` | done |
 | Run the full test suite in an environment with real torch; add CI | planned |
 
 ## Month 2 – Windowing experiments (Nov)
@@ -21,15 +21,15 @@ Status values: planned / in progress / done. Update this file as work lands.
 |---|---|
 | Sweep window and step sizes per dataset using `window_stats`; record results in `docs/` | planned |
 | Compare fixed-size vs time-based windows on BGL (window count, length, anomaly ratio) | planned |
-| Fix inconsistent imports (`from helper import` vs `from prepareData.helper import`) so scripts run from the repo root | planned |
+| Fix inconsistent imports (`from helper import` vs `from prepareData.helper import`) so scripts run from the repo root | done |
 
 ## Month 3 – Robustness and performance (Dec)
 | Item | Status |
 |---|---|
-| Replace hard-coded data paths in `sliding_window.py` / `session_window.py` with CLI arguments | planned |
+| Replace hard-coded data paths in `sliding_window.py` / `session_window.py` with CLI arguments (`sliding_window.py` done; `session_window.py` pending) | in progress |
 | Cache structured logs so reruns skip parsing | planned |
 | Profile `replace_patterns` masking and benchmark alternatives | planned |
-| Edge cases: empty windows, very long sequences, unparseable lines (tests) | planned |
+| Edge cases: empty windows, very long sequences, unparseable lines (tests; windowing and parsing covered, long sequences pending) | in progress |
 
 ## Month 4 – Integration and write-up (Jan)
 | Item | Status |
