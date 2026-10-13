@@ -80,11 +80,12 @@ def main():
     parser.add_argument("--limit", type=int, default=20, help="First N sequences; 0 evaluates the entire file")
     parser.add_argument("--max-seq-len", type=int, default=128)
     parser.add_argument("--max-content-len", type=int, default=100)
+    parser.add_argument("--max-new-tokens", type=int, default=6, help="Maximum generated tokens per sequence")
     parser.add_argument("--output-dir", type=Path, help="Defaults to outputs/<dataset>-smoke")
     parser.add_argument("--check-only", action="store_true", help="Validate local files without loading models")
     parser.add_argument("--trace-output", type=Path, help="Save actual first-batch tensor shapes and excerpts for the walkthrough")
     args = parser.parse_args()
-    if min(args.batch_size, args.max_seq_len, args.max_content_len) < 1 or args.limit < 0:
+    if min(args.batch_size, args.max_seq_len, args.max_content_len, args.max_new_tokens) < 1 or args.limit < 0:
         parser.error("Batch size and length limits must be positive; --limit must be nonnegative.")
     data_path = args.data or ROOT_DIR / "data" / args.dataset / "test.csv"
     checkpoint = args.checkpoint or ROOT_DIR / f"ft_model_{args.dataset}"
@@ -120,7 +121,8 @@ def main():
     from model import LogAnomalyModel
     model = LogAnomalyModel(str(args.bert_path), str(args.llama_path), ft_path=str(checkpoint),
                    is_train_mode=False, device=device,
-                   max_content_len=args.max_content_len, max_seq_len=args.max_seq_len)
+                   max_content_len=args.max_content_len, max_seq_len=args.max_seq_len,
+                   max_new_tokens=args.max_new_tokens)
     collator = CustomCollator(model.Bert_tokenizer, max_seq_len=args.max_seq_len,
                               max_content_len=args.max_content_len)
     dataloader = DataLoader(dataset, batch_size=args.batch_size, collate_fn=collator,
@@ -129,7 +131,8 @@ def main():
     metadata = {"dataset": args.dataset, "data": str(data_path.resolve()),
                 "checkpoint": str(checkpoint.resolve()), "device": str(device),
                 "batch_size": args.batch_size, "limit": args.limit,
-                "max_seq_len": args.max_seq_len, "max_content_len": args.max_content_len}
+                "max_seq_len": args.max_seq_len, "max_content_len": args.max_content_len,
+                "max_new_tokens": args.max_new_tokens}
     (output_dir / "run.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
 

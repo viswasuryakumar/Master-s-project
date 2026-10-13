@@ -98,11 +98,17 @@ class LogAnomalyModel(torch.nn.Module):
     def __init__(
         self, Bert_path, Llama_path, ft_path=None, is_train_mode=True,
         device=torch.device('cuda:0'), max_content_len=128, max_seq_len=128,
+        max_new_tokens=6,
     ):
         super().__init__()
 
         if max_content_len <= 0 or max_seq_len <= 0:
             raise ValueError('Content and sequence length limits must be positive.')
+
+        if isinstance(max_new_tokens, bool) or not isinstance(max_new_tokens, int):
+            raise TypeError('Generation length must be an integer.')
+        if max_new_tokens <= 0:
+            raise ValueError('Generation length must be positive.')
 
         self.Bert_path = Bert_path
         self.Llama_path = Llama_path
@@ -110,6 +116,7 @@ class LogAnomalyModel(torch.nn.Module):
         self.is_train_mode = is_train_mode
         self.max_content_len = max_content_len
         self.max_seq_len = max_seq_len
+        self.max_new_tokens = max_new_tokens
         self.device = torch.device(device)
 
         self.load_tokenizers()
@@ -332,7 +339,7 @@ class LogAnomalyModel(torch.nn.Module):
         cache = DynamicCache()
         answer = []
 
-        for _ in range(6):
+        for _ in range(self.max_new_tokens):
             position_ids = attention_mask.long().cumsum(dim=-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 0)
             if cache.get_seq_length() == 0:
