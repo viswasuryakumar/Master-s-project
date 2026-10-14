@@ -83,6 +83,37 @@ def stack_and_pad_right(tensors):
 
 
 
+def split_sequence_embeddings(embeddings, start_positions):
+    from operator import index
+
+    if not isinstance(embeddings, torch.Tensor):
+        raise TypeError('Sequence embeddings must be a torch.Tensor.')
+    if embeddings.ndim != 2 or embeddings.shape[0] == 0:
+        raise ValueError('Sequence embeddings must contain a nonempty matrix of messages.')
+    if isinstance(start_positions, torch.Tensor) and start_positions.ndim != 1:
+        raise ValueError('Sequence boundaries must be one-dimensional.')
+
+    boundaries = []
+    previous = 0
+    for position in start_positions:
+        if isinstance(position, torch.Tensor):
+            if position.ndim != 0:
+                raise ValueError('Each sequence boundary must be a scalar.')
+            position = position.item()
+        if isinstance(position, bool):
+            raise TypeError('Sequence boundaries must be integers, not booleans.')
+        try:
+            boundary = index(position)
+        except TypeError:
+            raise TypeError('Sequence boundaries must be integers.') from None
+        if boundary <= previous or boundary >= embeddings.shape[0]:
+            raise ValueError('Sequence boundaries must increase within the message batch.')
+        boundaries.append(boundary)
+        previous = boundary
+
+    return torch.tensor_split(embeddings, boundaries)
+
+
 def build_quantization_config(compute_dtype=torch.bfloat16):
     from transformers import BitsAndBytesConfig
 
@@ -259,7 +290,7 @@ class LogAnomalyModel(torch.nn.Module):
         embedding_layer = self.Llama_model.get_input_embeddings()
         encoded = self.Bert_model(**inputs).pooler_output
         projected = self.projector(encoded.to(dtype=self.projector.weight.dtype))
-        sequences = torch.tensor_split(
+        sequences = split_sequence_embeddings(
             projected.to(dtype=embedding_layer.weight.dtype), seq_positions,
         )
         instruction_embeddings = embedding_layer(self.instruc_tokens['input_ids'])
@@ -308,7 +339,7 @@ class LogAnomalyModel(torch.nn.Module):
         embedding_layer = self.Llama_model.get_input_embeddings()
         encoded = self.Bert_model(**inputs).pooler_output
         projected = self.projector(encoded.to(dtype=self.projector.weight.dtype))
-        sequences = torch.tensor_split(
+        sequences = split_sequence_embeddings(
             projected.to(dtype=embedding_layer.weight.dtype), seq_positions,
         )
         instruction_embeddings = embedding_layer(self.instruc_tokens['input_ids'])

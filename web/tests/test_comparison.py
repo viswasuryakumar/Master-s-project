@@ -138,3 +138,43 @@ def test_hosted_chat_receives_comparison_and_evidence(client,monkeypatch):
     assert len(evidence['detector_comparison'])==4
     assert all(p['origin']=='comparison_simulation' for p in evidence['detector_comparison'])
     assert evidence['logs']==['L1: service recovered','L2: ERROR connection refused']
+
+@pytest.mark.parametrize('boundaries, lengths', [([], [3]), ([1], [1, 2]), ([1, 2], [1, 1, 1])])
+def test_model_sequence_boundaries_preserve_messages(boundaries, lengths):
+    torch = pytest.importorskip('torch')
+    from model import split_sequence_embeddings
+
+    embeddings = torch.arange(12, dtype=torch.float32).reshape(3, 4)
+    embeddings.requires_grad_()
+    sequences = split_sequence_embeddings(embeddings, boundaries)
+    assert [sequence.shape[0] for sequence in sequences] == lengths
+    assert torch.equal(torch.cat(sequences), embeddings)
+    sum(sequence.sum() for sequence in sequences).backward()
+    assert torch.equal(embeddings.grad, torch.ones_like(embeddings))
+    tensor_boundaries = torch.tensor(boundaries, dtype=torch.long)
+    repeated = split_sequence_embeddings(embeddings.detach(), tensor_boundaries)
+    assert all(torch.equal(left, right) for left, right in zip(sequences, repeated))
+
+
+@pytest.mark.parametrize('boundaries', [[0], [-1], [3], [4], [2, 1], [1, 1], [1.5], [True]])
+def test_model_rejects_invalid_sequence_boundaries(boundaries):
+    torch = pytest.importorskip('torch')
+    from model import split_sequence_embeddings
+
+    with pytest.raises((TypeError, ValueError)):
+        split_sequence_embeddings(torch.zeros(3, 4), boundaries)
+
+
+def test_model_rejects_invalid_embedding_and_boundary_shapes():
+    torch = pytest.importorskip('torch')
+    from model import split_sequence_embeddings
+
+    with pytest.raises(TypeError):
+        split_sequence_embeddings([[0.0]], [])
+    for embeddings in (torch.empty(0, 4), torch.zeros(3), torch.zeros(2, 3, 4)):
+        with pytest.raises(ValueError):
+            split_sequence_embeddings(embeddings, [])
+    for boundaries in (torch.tensor(1), torch.tensor([[1]]), [torch.tensor([1])]):
+        with pytest.raises(ValueError):
+            split_sequence_embeddings(torch.zeros(3, 4), boundaries)
+
