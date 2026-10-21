@@ -31,7 +31,13 @@ with st.sidebar:
     st.caption("A focused workspace for exploring system log health.")
     st.divider()
     st.markdown("### Analysis controls")
-    st.selectbox("Input source", ["Choose a log file", "Paste log records"], disabled=True)
+    input_source = st.radio("Input source", ["Upload a log file", "Paste log records"])
+    uploaded_file = None
+    pasted_records = ""
+    if input_source == "Upload a log file":
+        uploaded_file = st.file_uploader("Choose a .log or .txt file", type=["log", "txt"])
+    else:
+        pasted_records = st.text_area("Paste one record per line", height=150, placeholder="Paste BGL-format records here")
     st.slider("Sequence window", 1, 20, 2, disabled=True)
     st.slider("Sequence step", 1, 20, 2, disabled=True)
     st.divider()
@@ -40,7 +46,8 @@ with st.sidebar:
 
 st.title("LogLLM Workbench")
 st.markdown('<p class="lede">Upload, inspect, and evaluate log anomaly predictions in one focused workspace.</p>', unsafe_allow_html=True)
-st.markdown('<span class="status-pill">UI shell</span>', unsafe_allow_html=True)
+selected_source = uploaded_file.name if uploaded_file else ("Pasted records" if pasted_records.strip() else "Waiting for input")
+st.markdown(f'<span class="status-pill">Source: {selected_source}</span>', unsafe_allow_html=True)
 st.write("")
 
 metrics = st.columns(5)
@@ -50,7 +57,7 @@ metrics[2].metric("F1 score", "--")
 metrics[3].metric("Precision", "--")
 metrics[4].metric("Recall", "--")
 
-st.info("Choose a log source to begin analysis. Prediction and evaluation modules will be connected in a later commit.")
+st.info("Your input is selected and ready for the analysis pipeline. Prediction and evaluation modules will be connected in a later commit.")
 
 tab_overview, tab_predictions, tab_sequences, tab_evaluation, tab_guide = st.tabs(["Overview", "Predictions", "Sequences", "Evaluation", "How it works"])
 with tab_overview:
@@ -60,7 +67,7 @@ with tab_overview:
         st.write("An overview chart will appear after a log file is analyzed.")
     with right:
         st.subheader("Run summary")
-        st.markdown('<div class="note"><div class="mono">STATUS</div><b>Waiting for input</b><br><br>Select a log source from the sidebar to begin.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="note"><div class="mono">SELECTED SOURCE</div><b>{selected_source}</b><br><br>Input controls are ready. Analysis will be connected next.</div>', unsafe_allow_html=True)
 with tab_predictions:
     st.subheader("Record-level predictions")
     st.write("Predictions will be listed here after analysis.")
