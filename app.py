@@ -113,6 +113,13 @@ with tab_predictions:
     view["Truth"] = view["Truth"].map({0: "Normal", 1: "Anomalous"})
     view["Prediction"] = view["Prediction"].map({0: "Normal", 1: "Anomalous"})
     st.dataframe(view, width="stretch", hide_index=True, height=460)
+    st.download_button(
+        "Download prediction report",
+        data=view.to_csv(index=False).encode("utf-8"),
+        file_name="logllm_predictions.csv",
+        mime="text/csv",
+        help="Save the visible record-level predictions as a CSV file.",
+    )
 
 with tab_sequences:
     st.subheader("Grouped sequences")
@@ -130,6 +137,17 @@ with tab_evaluation:
     eval_cols[3].metric("False negatives", metrics["fn"])
     matrix = pd.DataFrame([[metrics["tn"], metrics["fp"]], [metrics["fn"], metrics["tp"]]], index=["Actual normal", "Actual anomalous"], columns=["Predicted normal", "Predicted anomalous"])
     st.dataframe(matrix, width="stretch")
+    with st.expander("How to read these metrics"):
+        metric_guide = pd.DataFrame({
+            "Metric": ["F1 score", "Precision", "Recall", "Accuracy"],
+            "Meaning": [
+                "Balance between precision and recall.",
+                "Of predicted anomalies, how many were truly anomalous.",
+                "Of true anomalies, how many the detector found.",
+                "Share of all records classified correctly.",
+            ],
+        })
+        st.dataframe(metric_guide, width="stretch", hide_index=True)
     st.warning("For unlabeled production logs, predictions are available but precision, recall, and F1 cannot be validated until labels are supplied.")
 
 with tab_guide:
