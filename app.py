@@ -112,10 +112,13 @@ with tab_predictions:
     view = parsed[["Truth", "Prediction", "Score", "Reason", "Id", "Time", "Level", "Content"]].copy()
     view["Truth"] = view["Truth"].map({0: "Normal", 1: "Anomalous"})
     view["Prediction"] = view["Prediction"].map({0: "Normal", 1: "Anomalous"})
-    st.dataframe(view, width="stretch", hide_index=True, height=460)
+    anomaly_only = st.checkbox("Show anomalous records only", help="Focus the table on records predicted as anomalous.")
+    visible_view = view[view["Prediction"] == "Anomalous"] if anomaly_only else view
+    st.caption(f"Showing {len(visible_view)} of {len(view)} records")
+    st.dataframe(visible_view, width="stretch", hide_index=True, height=460)
     st.download_button(
         "Download prediction report",
-        data=view.to_csv(index=False).encode("utf-8"),
+        data=visible_view.to_csv(index=False).encode("utf-8"),
         file_name="logllm_predictions.csv",
         mime="text/csv",
         help="Save the visible record-level predictions as a CSV file.",
@@ -126,6 +129,13 @@ with tab_sequences:
     st.caption("A sequence is anomalous when at least one record in that window is predicted anomalous.")
     sequence_view = pd.concat([result["train_groups"].assign(Split="Train"), result["test_groups"].assign(Split="Test")], ignore_index=True)
     st.dataframe(sequence_view[["Split", "Prediction", "Score", "Label", "item_Label", "Sequence"]], width="stretch", hide_index=True, height=420)
+    st.download_button(
+        "Download sequence report",
+        data=sequence_view.to_csv(index=False).encode("utf-8"),
+        file_name="logllm_sequences.csv",
+        mime="text/csv",
+        help="Save grouped train and test sequences as a CSV file.",
+    )
 
 with tab_evaluation:
     st.subheader("Evaluation against BGL labels")
