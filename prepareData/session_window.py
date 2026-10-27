@@ -1,3 +1,4 @@
+import argparse
 import os
 import re
 from collections import defaultdict
@@ -7,15 +8,21 @@ from tqdm import tqdm
 
 from prepareData.helper import structure_log
 
-data_dir = r'/mnt/public/gw/SyslogData/HDFS_v1'
-log_name = "HDFS.log"
-
-output_dir = data_dir
+DEFAULT_DATA_DIR = r'/mnt/public/gw/SyslogData/HDFS_v1'
+DEFAULT_LOG_NAME = "HDFS.log"
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Build session-based train/test data for HDFS logs.')
+    parser.add_argument('--data-dir', default=DEFAULT_DATA_DIR)
+    parser.add_argument('--log-name', default=DEFAULT_LOG_NAME)
+    parser.add_argument('--use-cache', action='store_true', help='reuse an up-to-date structured csv')
+    args = parser.parse_args()
+    data_dir, log_name = args.data_dir, args.log_name
+    output_dir = data_dir
+
     log_format = '<Date> <Time> <Pid> <Level> <Component>: <Content>'  # HDFS log format
-    structure_log(data_dir, output_dir, log_name, log_format)
+    structure_log(data_dir, output_dir, log_name, log_format, use_cache=args.use_cache)
 
     spliter = ' ;-; '
     train_ratio = 0.8
