@@ -26,10 +26,10 @@ Status values: planned / in progress / done. Update this file as work lands.
 ## Month 3 – Robustness and performance (Dec)
 | Item | Status |
 |---|---|
-| Replace hard-coded data paths in `sliding_window.py` / `session_window.py` with CLI arguments (`sliding_window.py` done; `session_window.py` pending) | in progress |
-| Cache structured logs so reruns skip parsing | planned |
+| Replace hard-coded data paths in `sliding_window.py` / `session_window.py` with CLI arguments | done |
+| Cache structured logs so reruns skip parsing (`--use-cache`) | done |
 | Profile `replace_patterns` masking and benchmark alternatives | planned |
-| Edge cases: empty windows, very long sequences, unparseable lines (tests; windowing and parsing covered, long sequences pending) | in progress |
+| Edge cases: empty windows, very long sequences, unparseable lines (tests) | done |
 
 ## Month 4 – Integration and write-up (Jan)
 | Item | Status |
