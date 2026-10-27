@@ -35,3 +35,15 @@
   Run ```python prepareData.session_window.py```  from the root directory to generate training and testing data.
   Training and testing data will be saved in {data_dir}
 
+
+## Parse-quality report
+
+Before windowing, check how much of a raw log actually parses:
+
+```
+python -m prepareData.parse_report --data-dir <dir> --log-name BGL.log
+```
+
+This writes `<log_name>_parse_report.json` to the data directory with counts of blank, unparseable and empty-content
+lines, duplicate messages, the parse rate and a few unparseable examples. Pass `--log-format` for log names that do not
+contain `bgl`, `thunderbird`, `spirit` or `liberty`, and `--start-line`/`--end-line` to match a sliced run.
