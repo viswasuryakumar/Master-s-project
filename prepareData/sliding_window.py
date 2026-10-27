@@ -3,6 +3,7 @@ import os.path
 
 import numpy as np
 import pandas as pd
+import argparse
 if __package__:
     from .helper import sliding_window, fixedSize_window, structure_log
 else:
@@ -11,8 +12,8 @@ else:
 #### for Thunderbird, Liberty, BGL
 
 
-data_dir = r'/mnt/public/gw/SyslogData/BGL'
-log_name = "BGL.log"
+DEFAULT_DATA_DIR = r'/mnt/public/gw/SyslogData/BGL'
+DEFAULT_LOG_NAME = "BGL.log"
 
 start_line = 0
 end_line = None
@@ -25,11 +26,17 @@ end_line = None
 # start_line = 160000000
 # end_line = 170000000
 
-output_dir = data_dir
-
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Build train/test windows for BGL, Liberty or Thunderbird logs.')
+    parser.add_argument('--data-dir', default=DEFAULT_DATA_DIR)
+    parser.add_argument('--log-name', default=DEFAULT_LOG_NAME)
+    parser.add_argument('--use-cache', action='store_true', help='reuse an up-to-date structured csv')
+    args = parser.parse_args()
+    data_dir, log_name = args.data_dir, args.log_name
+    output_dir = data_dir
+
     # group_type = 'time_sliding'
 
     window_size = 100
@@ -52,7 +59,7 @@ if __name__ == '__main__':
         raise Exception('missing valid log format')
     print(f'Auto log_format: {log_format}')
 
-    structure_log(data_dir, output_dir, log_name, log_format, start_line = start_line, end_line = end_line)
+    structure_log(data_dir, output_dir, log_name, log_format, start_line = start_line, end_line = end_line, use_cache = args.use_cache)
 
     print(f'window_size: {window_size}; step_size: {step_size}')
 

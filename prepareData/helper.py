@@ -152,7 +152,17 @@ def generate_logformat_regex(logformat):
     regex = re.compile('^' + regex + '$')
     return headers, regex
 
-def structure_log(input_dir, output_dir, log_name, log_format,  start_line = 0, end_line = None):
+def structure_log(input_dir, output_dir, log_name, log_format,  start_line = 0, end_line = None, use_cache = False):
+    """Parse log_name into <log_name>_structured.csv in output_dir.
+
+    With use_cache=True, skip parsing when that csv already exists and is at least as new as the log.
+    The cache does not track start_line/end_line, so delete the csv when changing them.
+    """
+    log_path = os.path.join(input_dir, log_name)
+    csv_path = os.path.join(output_dir, log_name + '_structured.csv')
+    if use_cache and os.path.exists(csv_path) and os.path.getmtime(csv_path) >= os.path.getmtime(log_path):
+        print('Using cached structured file: ' + csv_path)
+        return
     print('Structuring file: ' + os.path.join(input_dir, log_name))
     start_time = datetime.now()
     headers, regex = generate_logformat_regex(log_format)
