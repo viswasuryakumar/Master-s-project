@@ -15,6 +15,8 @@ st.markdown("""
 .stApp { background: var(--paper); color: var(--ink); }
 [data-testid="stSidebar"] { background: #102b2b; }
 [data-testid="stSidebar"] * { color: #e8f2ee !important; }
+[data-testid="stSidebar"] textarea { background: #ffffff !important; color: #17202a !important; -webkit-text-fill-color: #17202a !important; caret-color: #17202a !important; }
+[data-testid="stSidebar"] textarea::placeholder { color: #66717d !important; -webkit-text-fill-color: #66717d !important; }
 [data-testid="stSidebar"] .stRadio label, [data-testid="stSidebar"] .stSlider label { color: #b9cec7 !important; }
 h1, h2, h3, p, label, [data-testid="stMetricValue"], [data-testid="stMetricLabel"] { font-family: 'DM Sans', sans-serif; }
 h1 { letter-spacing: -0.045em; font-weight: 700; font-size: 3rem; margin-bottom: .2rem; }
@@ -52,6 +54,7 @@ with st.sidebar:
     window_size = st.slider("Sequence window", 1, 20, 2)
     step_size = st.slider("Sequence step", 1, 20, 2)
     threshold = st.slider("Anomaly threshold", 1, 6, 1, help="Higher values require more anomaly evidence in a message.")
+    analyze_clicked = st.button("Analyze logs", type="primary", use_container_width=True)
     st.divider()
     st.caption("Engine")
     st.markdown('<span class="status-pill">CPU baseline active</span>', unsafe_allow_html=True)
@@ -59,9 +62,14 @@ with st.sidebar:
 
 
 try:
-    if mode == "Upload BGL log" and raw_text is None:
+    if mode == "Bundled BGL sample" and not analyze_clicked:
+        result = run_demo(window_size=window_size, step_size=step_size, threshold=threshold)
+    elif mode == "Upload BGL log" and raw_text is None:
         raise ValueError("Choose a BGL log file before running analysis.")
-    result = run_demo(window_size=window_size, step_size=step_size, threshold=threshold) if raw_text is None else analyze_text(raw_text, window_size, step_size, threshold)
+    elif mode == "Paste BGL records" and not analyze_clicked:
+        raise ValueError("Paste your records, then click Analyze logs.")
+    else:
+        result = analyze_text(raw_text, window_size, step_size, threshold)
     error = None
 except ValueError as exc:
     result = None
@@ -79,12 +87,13 @@ metrics = result["metrics"]
 st.markdown(f'<span class="status-pill">Analyzed: {source_name}</span>', unsafe_allow_html=True)
 st.write("")
 
-metric_cols = st.columns(5)
+metric_cols = st.columns(6)
 metric_cols[0].metric("Records", len(parsed))
 metric_cols[1].metric("Predicted anomalies", int(parsed["Prediction"].sum()))
-metric_cols[2].metric("F1 score", f"{metrics['f1']:.3f}")
-metric_cols[3].metric("Precision", f"{metrics['precision']:.3f}")
-metric_cols[4].metric("Recall", f"{metrics['recall']:.3f}")
+metric_cols[2].metric("Accuracy", f"{metrics['accuracy']:.3f}")
+metric_cols[3].metric("F1 score", f"{metrics['f1']:.3f}")
+metric_cols[4].metric("Precision", f"{metrics['precision']:.3f}")
+metric_cols[5].metric("Recall", f"{metrics['recall']:.3f}")
 
 st.info("Predictions use a transparent CPU baseline that scores terms such as error, fault, fatal, and timeout. F1 is calculated because the BGL input includes ground-truth labels.")
 

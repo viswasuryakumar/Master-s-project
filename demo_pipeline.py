@@ -59,9 +59,32 @@ def _parse_text(text, regex, headers):
         line = line.strip()
         if not line:
             continue
-        match = regex.search(line)
-        if match:
-            records.append([match.group(header) for header in headers])
+        fields = line.split(maxsplit=9)
+        looks_like_full_bgl = len(fields) >= 10 and fields[1].isdigit() and re.fullmatch(r"\d{4}\.\d{2}\.\d{2}", fields[2])
+        if looks_like_full_bgl:
+            match = regex.search(line)
+            if match:
+                records.append([match.group(header) for header in headers])
+            continue
+
+        # Also accept the compact format used by the UI examples:
+        # LABEL DATE TIME CODE NODE COMPONENT: MESSAGE
+        compact_fields = line.split(maxsplit=6)
+        if len(compact_fields) >= 7:
+            label, date, time, code, node, component, content = compact_fields
+            values = {
+                "Label": label,
+                "Id": date,
+                "Date": date,
+                "Code1": code,
+                "Time": time,
+                "Code2": node,
+                "Component1": component.rstrip(":"),
+                "Component2": component.rstrip(":"),
+                "Level": component.rstrip(":"),
+                "Content": content,
+            }
+            records.append([values.get(header, "") for header in headers])
     return pd.DataFrame(records, columns=headers)
 
 
