@@ -28,6 +28,12 @@ class EdgeCaseTests(unittest.TestCase):
         out = fixedSize_window(logs(0), window_size=5, step_size=5)
         self.assertEqual(len(out), 0)
 
+    def test_very_long_input_window_count(self):
+        out = fixedSize_window(logs(50000), window_size=1000, step_size=500)
+        self.assertEqual(len(out), 100)
+        self.assertEqual(len(out['Content'][0]), 1000)
+        self.assertEqual(len(out['Content'][99]), 500)
+
 
 if __name__ == '__main__':
     unittest.main()
