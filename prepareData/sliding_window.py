@@ -30,6 +30,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Build train/test windows for BGL, Liberty or Thunderbird logs.')
     parser.add_argument('--data-dir', default=DEFAULT_DATA_DIR)
     parser.add_argument('--log-name', default=DEFAULT_LOG_NAME)
+    parser.add_argument('--use-cache', action='store_true', help='reuse an up-to-date structured csv')
     args = parser.parse_args()
     data_dir, log_name = args.data_dir, args.log_name
     output_dir = data_dir
@@ -56,7 +57,7 @@ if __name__ == '__main__':
         raise Exception('missing valid log format')
     print(f'Auto log_format: {log_format}')
 
-    structure_log(data_dir, output_dir, log_name, log_format, start_line = start_line, end_line = end_line)
+    structure_log(data_dir, output_dir, log_name, log_format, start_line = start_line, end_line = end_line, use_cache = args.use_cache)
 
     print(f'window_size: {window_size}; step_size: {step_size}')
 
