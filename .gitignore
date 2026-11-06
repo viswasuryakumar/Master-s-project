@@ -1,9 +1,5 @@
-.venv*/
+.venv-logllm/
 __pycache__/
 *.pyc
-models/
-data/
-outputs/
-.DS_Store
-.env
-.env.*
+_bgl_input.tmp
+.streamlit/

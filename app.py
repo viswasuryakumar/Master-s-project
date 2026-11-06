@@ -1,181 +1,128 @@
-"""LogLLM anomaly detection workbench."""
+from pathlib import Path
 
-import pandas as pd
 import streamlit as st
 
-from demo_pipeline import analyze_text, run_demo
+from bgl_demo import analyze_text
 
 
-st.set_page_config(page_title="LogLLM Workbench", page_icon="LL", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title='BGL Signal Lab', page_icon='B', layout='wide', initial_sidebar_state='expanded')
 
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
-:root { --ink: #17202a; --muted: #66717d; --line: #dce4e8; --paper: #f7faf9; --teal: #0f766e; }
-.stApp { background: var(--paper); color: var(--ink); }
-[data-testid="stSidebar"] { background: #102b2b; }
-[data-testid="stSidebar"] * { color: #e8f2ee !important; }
-[data-testid="stSidebar"] textarea { background: #ffffff !important; color: #17202a !important; -webkit-text-fill-color: #17202a !important; caret-color: #17202a !important; }
-[data-testid="stSidebar"] textarea::placeholder { color: #66717d !important; -webkit-text-fill-color: #66717d !important; }
-[data-testid="stSidebar"] .stRadio label, [data-testid="stSidebar"] .stSlider label { color: #b9cec7 !important; }
-h1, h2, h3, p, label, [data-testid="stMetricValue"], [data-testid="stMetricLabel"] { font-family: 'DM Sans', sans-serif; }
-h1 { letter-spacing: -0.045em; font-weight: 700; font-size: 3rem; margin-bottom: .2rem; }
-h2 { letter-spacing: -0.025em; }
-[data-testid="stMetric"] { background: white; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
-[data-testid="stMetricValue"] { color: var(--ink); }
-[data-testid="stMetricLabel"] { color: var(--muted); }
-.lede { color: var(--muted); font-size: 1.05rem; max-width: 760px; margin-bottom: 1.6rem; }
-.status-pill { display: inline-block; border-radius: 999px; padding: 5px 10px; font-size: .78rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; background: #d9f1e5; color: #17613d; }
-.mono { font-family: 'Space Mono', monospace; font-size: .82rem; }
-.note { background: #edf5f3; border: 1px solid #c9dfd9; border-radius: 12px; padding: 14px 16px; color: #24413c; }
-button[kind="primary"] { background: var(--teal); border-color: var(--teal); }
-</style>
-""", unsafe_allow_html=True)
+st.markdown(
+    '''
+    <style>
+    :root { --ink:#17202a; --muted:#64748b; --line:#dbe4ee; --blue:#2166f3; }
+    .stApp { background: #f6f8fb; color: var(--ink); }
+    [data-testid="stHeader"] { background: transparent; }
+    [data-testid="stSidebar"] { background: #101a2b; }
+    [data-testid="stSidebar"] * { color: #edf4ff; }
+    [data-testid="stSidebar"] .stCaption { color: #aebbd0; }
+    .hero { padding: 1.6rem 0 1.2rem; }
+    .hero h1 { margin: 0; font-size: 2.25rem; letter-spacing: -0.03em; color: #17202a; }
+    .hero p { margin: .45rem 0 0; color: #64748b; max-width: 62rem; font-size: 1.03rem; }
+    .baseline { margin: .8rem 0 1.2rem; padding: .75rem 1rem; border: 1px solid #c8d8f7; border-radius: 12px; background: #edf4ff; color: #24436f; }
+    .section-title { margin: 1.3rem 0 .55rem; color: #17202a; font-size: 1.2rem; font-weight: 700; }
+    div[data-testid="stMetric"] { background: white; border: 1px solid var(--line); border-radius: 12px; padding: .8rem 1rem; }
+    div[data-testid="stMetricLabel"] { color: var(--muted); }
+    .stButton > button[kind="primary"] { background: var(--blue); border-color: var(--blue); }
+    </style>
+    ''',
+    unsafe_allow_html=True,
+)
 
+
+def metric_values(records):
+    y_true, y_pred = records['Anomaly'], records['Predicted anomaly']
+    tp = int(((y_true == 1) & (y_pred == 1)).sum())
+    tn = int(((y_true == 0) & (y_pred == 0)).sum())
+    fp = int(((y_true == 0) & (y_pred == 1)).sum())
+    fn = int(((y_true == 1) & (y_pred == 0)).sum())
+    precision = tp / (tp + fp) if tp + fp else 0.0
+    recall = tp / (tp + fn) if tp + fn else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+    accuracy = (tp + tn) / len(records) if len(records) else 0.0
+    return accuracy, f1, precision, recall, [[tn, fp], [fn, tp]]
+
+
+sample = Path('data/BGL/raw-excerpt.log').read_text(encoding='latin-1')
 
 with st.sidebar:
-    st.markdown("## LogLLM\n**Anomaly detection workbench**")
-    st.caption("Turn raw BGL records into inspectable predictions.")
-    mode = st.radio("Input source", ["Bundled BGL sample", "Upload BGL log", "Paste BGL records"])
-    raw_text = None
-    source_name = "Bundled sample"
-    if mode == "Upload BGL log":
-        uploaded = st.file_uploader("Choose a .log or .txt file", type=["log", "txt"])
-        if uploaded:
-            raw_text = uploaded.getvalue().decode("latin-1")
-            source_name = uploaded.name
+    st.markdown('## BGL Signal Lab')
+    st.caption('A transparent log review workspace')
+    st.divider()
+    source = st.radio('Log source', ['Bundled sample', 'Upload a file', 'Paste records'])
+    st.divider()
+    st.markdown('### Sequence settings')
+    window_size = st.number_input('Window size', min_value=1, value=2, step=1, help='Records per grouped sequence.')
+    step_size = st.number_input('Step size', min_value=1, value=2, step=1, help='Records to advance between groups.')
+    threshold = st.number_input('Anomaly threshold', min_value=1, value=1, step=1, help='Keyword hits required for a baseline anomaly prediction.')
+    st.divider()
+    st.caption('Baseline terms: error, fail, fatal, critical, exception, corrupt, fault, unable, panic, timeout, denied')
+
+if source == 'Bundled sample':
+    text = sample
+    source_note = 'Using the bundled six-record sample.'
+elif source == 'Upload a file':
+    uploaded = st.file_uploader('Choose a BGL log file', type=['log', 'txt'])
+    text = uploaded.getvalue().decode('latin-1') if uploaded else ''
+    source_note = uploaded.name if uploaded else 'Choose a file to begin.'
+else:
+    text = st.text_area('Paste BGL records', value=sample, height=190)
+    source_note = 'Pasted input stays in this session and is not written to the dataset.'
+
+st.markdown('<div class="hero"><h1>Find the signal in your logs.</h1><p>Parse BGL records, group them into fixed-size sequences, and review transparent baseline anomaly predictions.</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="baseline"><strong>Baseline prediction method</strong><br>This CPU-friendly keyword scorer is for demonstration only. It is not trained model inference.</div>', unsafe_allow_html=True)
+
+top_left, top_right = st.columns([4, 1])
+with top_left:
+    st.caption(source_note)
+with top_right:
+    analyze = st.button('Analyze logs', type='primary', use_container_width=True)
+
+if analyze:
+    try:
+        st.session_state['analysis'] = analyze_text(text, window_size, step_size, threshold)
+    except Exception as exc:
+        st.error(f'Could not analyze these logs: {exc}')
+
+if 'analysis' not in st.session_state:
+    st.info('Choose a source and select Analyze logs to see parsed records and evaluation results.')
+else:
+    records, grouped = st.session_state['analysis']
+    accuracy, f1, precision, recall, matrix = metric_values(records)
+    anomaly_count = int(records['Predicted anomaly'].sum())
+    normal_count = len(records) - anomaly_count
+
+    st.markdown('<div class="section-title">Run summary</div>', unsafe_allow_html=True)
+    summary = st.columns(4)
+    summary[0].metric('Records parsed', len(records))
+    summary[1].metric('Predicted anomalies', anomaly_count, delta=f'{anomaly_count} flagged')
+    summary[2].metric('Normal predictions', normal_count)
+    summary[3].metric('Sequences', len(grouped))
+
+    st.markdown('<div class="section-title">Parsed records</div>', unsafe_allow_html=True)
+    anomaly_only = st.checkbox('Show anomaly predictions only')
+    visible = records[records['Predicted anomaly'].eq(1)] if anomaly_only else records
+    st.dataframe(visible[['Label', 'Id', 'Date', 'Time', 'Level', 'Message', 'Predicted anomaly', 'Reason', 'Split']], use_container_width=True, hide_index=True)
+
+    records_tab, sequences_tab, evaluation_tab = st.tabs(['Records', 'Grouped sequences', 'Evaluation'])
+    with records_tab:
+        st.caption('Ground-truth labels come from the BGL label field: “-” is normal; any other label is anomalous.')
+        st.dataframe(visible[['Id', 'Label', 'Message', 'Score', 'Reason']], use_container_width=True, hide_index=True)
+    with sequences_tab:
+        st.dataframe(grouped[['Split', 'Sequence anomaly', 'Record labels', 'Sequence']], use_container_width=True, hide_index=True)
+        st.download_button('Download grouped sequences CSV', grouped.to_csv(index=False), 'bgl_sequences.csv', 'text/csv', use_container_width=True)
+    with evaluation_tab:
+        st.write(f"Training records: {(records['Split'] == 'train').sum()}  ·  Testing records: {(records['Split'] == 'test').sum()}  ·  Training sequences: {(grouped['Split'] == 'train').sum()}  ·  Testing sequences: {(grouped['Split'] == 'test').sum()}")
+        if records['Label'].notna().all():
+            metric_cols = st.columns(4)
+            for col, label, value in zip(metric_cols, ['Accuracy', 'F1 score', 'Precision', 'Recall'], [accuracy, f1, precision, recall]):
+                col.metric(label, f'{value:.3f}')
+            st.caption('Confusion matrix · rows = actual, columns = predicted')
+            st.table({'Predicted normal': [matrix[0][0], matrix[1][0]], 'Predicted anomalous': [matrix[0][1], matrix[1][1]]})
         else:
-            source_name = "No file selected"
-    elif mode == "Paste BGL records":
-        raw_text = st.text_area("Paste one BGL record per line", height=180, placeholder="- 1117838571 2005.06.03 ... message")
-        source_name = "Pasted records"
-    st.divider()
-    st.markdown("### Analysis controls")
-    window_size = st.slider("Sequence window", 1, 20, 2)
-    step_size = st.slider("Sequence step", 1, 20, 2)
-    threshold = st.slider("Anomaly threshold", 1, 6, 1, help="Higher values require more anomaly evidence in a message.")
-    analyze_clicked = st.button("Analyze logs", type="primary", use_container_width=True)
-    st.divider()
-    st.caption("Engine")
-    st.markdown('<span class="status-pill">CPU baseline active</span>', unsafe_allow_html=True)
-    st.caption("Transparent keyword scoring is active. Full LogLLM model inference can be connected later.")
+            st.info('Evaluation metrics are unavailable because these records do not contain ground-truth labels.')
 
+    st.download_button('Download predictions CSV', records.to_csv(index=False), 'bgl_predictions.csv', 'text/csv', use_container_width=True)
 
-try:
-    if mode == "Bundled BGL sample" and not analyze_clicked:
-        result = run_demo(window_size=window_size, step_size=step_size, threshold=threshold)
-    elif mode == "Upload BGL log" and raw_text is None:
-        raise ValueError("Choose a BGL log file before running analysis.")
-    elif mode == "Paste BGL records" and not analyze_clicked:
-        raise ValueError("Paste your records, then click Analyze logs.")
-    else:
-        result = analyze_text(raw_text, window_size, step_size, threshold)
-    error = None
-except ValueError as exc:
-    result = None
-    error = str(exc)
-
-st.title("LogLLM Workbench")
-st.markdown('<p class="lede">Upload, inspect, and evaluate log anomaly predictions in one focused workspace.</p>', unsafe_allow_html=True)
-
-if error:
-    st.error(error)
-    st.stop()
-
-parsed = result["parsed"]
-metrics = result["metrics"]
-st.markdown(f'<span class="status-pill">Analyzed: {source_name}</span>', unsafe_allow_html=True)
-st.write("")
-
-metric_cols = st.columns(6)
-metric_cols[0].metric("Records", len(parsed))
-metric_cols[1].metric("Predicted anomalies", int(parsed["Prediction"].sum()))
-metric_cols[2].metric("Accuracy", f"{metrics['accuracy']:.3f}")
-metric_cols[3].metric("F1 score", f"{metrics['f1']:.3f}")
-metric_cols[4].metric("Precision", f"{metrics['precision']:.3f}")
-metric_cols[5].metric("Recall", f"{metrics['recall']:.3f}")
-
-st.info("Predictions use a transparent CPU baseline that scores terms such as error, fault, fatal, and timeout. F1 is calculated because the BGL input includes ground-truth labels.")
-
-tab_overview, tab_predictions, tab_sequences, tab_evaluation, tab_guide = st.tabs(["Overview", "Predictions", "Sequences", "Evaluation", "How it works"])
-
-with tab_overview:
-    left, right = st.columns([1.2, 1])
-    with left:
-        st.subheader("Prediction distribution")
-        distribution = pd.DataFrame({"count": [int((parsed["Prediction"] == 0).sum()), int((parsed["Prediction"] == 1).sum())]}, index=["Normal", "Anomalous"])
-        st.bar_chart(distribution, color="#0f766e")
-    with right:
-        st.subheader("Run summary")
-        st.markdown(f"""
-        <div class="note">
-        <div class="mono">SOURCE</div><b>{source_name}</b><br><br>
-        <div class="mono">WINDOW / STEP</div><b>{window_size} / {step_size}</b><br><br>
-        <div class="mono">THRESHOLD</div><b>{threshold}</b><br><br>
-        The current result is a prediction pass only. No model training or dataset files were written.
-        </div>
-        """, unsafe_allow_html=True)
-
-with tab_predictions:
-    st.subheader("Record-level predictions")
-    view = parsed[["Truth", "Prediction", "Score", "Reason", "Id", "Time", "Level", "Content"]].copy()
-    view["Truth"] = view["Truth"].map({0: "Normal", 1: "Anomalous"})
-    view["Prediction"] = view["Prediction"].map({0: "Normal", 1: "Anomalous"})
-    anomaly_only = st.checkbox("Show anomalous records only", help="Focus the table on records predicted as anomalous.")
-    visible_view = view[view["Prediction"] == "Anomalous"] if anomaly_only else view
-    st.caption(f"Showing {len(visible_view)} of {len(view)} records")
-    st.dataframe(visible_view, width="stretch", hide_index=True, height=460)
-    st.download_button(
-        "Download prediction report",
-        data=visible_view.to_csv(index=False).encode("utf-8"),
-        file_name="logllm_predictions.csv",
-        mime="text/csv",
-        help="Save the visible record-level predictions as a CSV file.",
-    )
-
-with tab_sequences:
-    st.subheader("Grouped sequences")
-    st.caption("A sequence is anomalous when at least one record in that window is predicted anomalous.")
-    sequence_view = pd.concat([result["train_groups"].assign(Split="Train"), result["test_groups"].assign(Split="Test")], ignore_index=True)
-    st.dataframe(sequence_view[["Split", "Prediction", "Score", "Label", "item_Label", "Sequence"]], width="stretch", hide_index=True, height=420)
-    st.download_button(
-        "Download sequence report",
-        data=sequence_view.to_csv(index=False).encode("utf-8"),
-        file_name="logllm_sequences.csv",
-        mime="text/csv",
-        help="Save grouped train and test sequences as a CSV file.",
-    )
-
-with tab_evaluation:
-    st.subheader("Evaluation against BGL labels")
-    st.caption("These metrics compare the baseline prediction with the label embedded in each BGL record.")
-    eval_cols = st.columns(4)
-    eval_cols[0].metric("Accuracy", f"{metrics['accuracy']:.3f}")
-    eval_cols[1].metric("True positives", metrics["tp"])
-    eval_cols[2].metric("False positives", metrics["fp"])
-    eval_cols[3].metric("False negatives", metrics["fn"])
-    matrix = pd.DataFrame([[metrics["tn"], metrics["fp"]], [metrics["fn"], metrics["tp"]]], index=["Actual normal", "Actual anomalous"], columns=["Predicted normal", "Predicted anomalous"])
-    st.dataframe(matrix, width="stretch")
-    with st.expander("How to read these metrics"):
-        metric_guide = pd.DataFrame({
-            "Metric": ["F1 score", "Precision", "Recall", "Accuracy"],
-            "Meaning": [
-                "Balance between precision and recall.",
-                "Of predicted anomalies, how many were truly anomalous.",
-                "Of true anomalies, how many the detector found.",
-                "Share of all records classified correctly.",
-            ],
-        })
-        st.dataframe(metric_guide, width="stretch", hide_index=True)
-    st.warning("For unlabeled production logs, predictions are available but precision, recall, and F1 cannot be validated until labels are supplied.")
-
-with tab_guide:
-    st.subheader("What this version does")
-    st.markdown("""
-    1. Parses BGL-format records using the original LogLLM parsing helper.
-    2. Scores anomaly evidence in each message using a transparent CPU baseline.
-    3. Groups records into fixed-size sequences using the original grouping helper.
-    4. Shows predictions, evidence, sequence labels, and evaluation metrics.
-
-    The full LogLLM fine-tuned model is not loaded by this laptop-friendly UI. It can be connected later on a machine with the required model files and runtime.
-    """)
+with st.expander('How it works'):
+    st.write('The parser reads the fixed BGL fields, maps “-” to normal and every other label to anomalous, then applies the existing fixed-size grouping helper. Predictions are based on configured anomaly terms. Evaluation metrics use the BGL ground-truth labels when present.')
