@@ -178,3 +178,33 @@ def test_model_rejects_invalid_embedding_and_boundary_shapes():
         with pytest.raises(ValueError):
             split_sequence_embeddings(torch.zeros(3, 4), boundaries)
 
+
+@pytest.mark.parametrize('truth, prediction', [
+    ('unknown', 'normal'), ('normal', 'unknown'),
+    (None, 'anomalous'), ('anomalous', None), (0, 'normal'),
+])
+def test_comparison_metrics_reject_invalid_labels(truth, prediction):
+    with pytest.raises(ValueError):
+        comparison.metric([(truth, prediction)])
+
+
+def test_invalid_detector_prediction_is_excluded(client, monkeypatch):
+    original = comparison.predict
+
+    def predict(detector, profile, logs):
+        if detector.id == 'logbert':
+            return {'prediction': 'unknown', 'reason': 'Invalid result fixture'}
+        return original(detector, profile, logs)
+
+    monkeypatch.setattr(comparison, 'predict', predict)
+    run = new_run(client, [{'sequence_id': 'invalid-result', 'logs': ['routine'], 'ground_truth': 'normal'}])
+    summary = finished(run)
+    assert summary['status'] == 'completed_with_errors'
+    assert summary['coverage']['evaluated'] == 0
+    assert summary['coverage']['labeled_incomplete'] == 1
+    assert all(detector['metrics'] is None for detector in summary['detectors'])
+    rows = client.get(f'/api/runs/{run}/comparison/results').json()['items']
+    failed = next(item for item in rows[0]['predictions'] if item['detector_id'] == 'logbert')
+    assert failed['status'] == 'failed'
+    assert failed['prediction'] is None
+    assert failed['error'] == 'Detector could not process this sequence.'

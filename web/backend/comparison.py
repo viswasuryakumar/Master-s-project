@@ -99,6 +99,9 @@ def tick(c):
 
 def metric(rows):
     if not rows:return None
+    if any(truth not in ('normal', 'anomalous') or prediction not in ('normal', 'anomalous')
+           for truth, prediction in rows):
+        raise ValueError('Comparison metrics require normal or anomalous labels.')
     tp=sum(t=='anomalous' and p=='anomalous' for t,p in rows)
     fp=sum(t=='normal' and p=='anomalous' for t,p in rows)
     fn=sum(t=='anomalous' and p=='normal' for t,p in rows)
