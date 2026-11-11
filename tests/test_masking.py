@@ -3,7 +3,7 @@ import tempfile
 import unittest
 
 from prepareData.masking import (DEFAULT_SOURCE, SEQUENCE_SEPARATOR, VARIANTS, Baseline, CachedMessages, CachedRows,
-                                 load_patterns)
+                                 Normalizer, Precompiled, benchmark, load_patterns, profile_patterns)
 
 SAMPLES = [
     'Connection from 10.251.43.21:50010 refused ... retry in 5 seconds',
@@ -65,6 +65,66 @@ class VariantTests(unittest.TestCase):
             self.assertEqual(normalize.cache_info(), {'hits': hits, 'misses': misses}, variant.name)
             normalize.reset()
             self.assertEqual(normalize.cache_info(), {'hits': 0, 'misses': 0})
+
+
+class Unchanged(Normalizer):
+    """A deliberately wrong variant: returns its input without masking anything."""
+    name = 'unchanged'
+
+    def __init__(self, patterns):
+        pass
+
+    def __call__(self, text):
+        return text
+
+
+class BenchmarkTests(unittest.TestCase):
+    ROWS = ['value 12345 here', 'no digits']
+
+    def test_one_result_per_variant_and_all_identical(self):
+        # Repeat the rows so each run takes measurable time and the speedup is defined.
+        results = benchmark(self.ROWS * 500, load_patterns(), repeat=1)
+        self.assertEqual([entry['name'] for entry in results], [variant.name for variant in VARIANTS])
+        self.assertTrue(all(entry['identical'] for entry in results))
+        self.assertTrue(all(entry['seconds'] >= 0 for entry in results))
+        by_name = {entry['name']: entry for entry in results}
+        self.assertAlmostEqual(by_name['baseline']['speedup_vs_baseline'], 1.0)
+        self.assertIsNone(by_name['baseline']['cache'])
+        self.assertIsNotNone(by_name['cached_messages']['cache'])
+
+    def test_changed_output_is_reported_as_a_mismatch(self):
+        results = benchmark(self.ROWS, load_patterns(), repeat=1, variants=(Baseline, Unchanged))
+        wrong = results[1]
+        self.assertFalse(wrong['identical'])
+        self.assertEqual(wrong['mismatches'], 1)
+        self.assertEqual(wrong['first_mismatch']['row'], 0)
+        self.assertEqual(wrong['first_mismatch']['got'], 'value 12345 here')
+
+    def test_speedup_is_none_without_a_baseline(self):
+        results = benchmark(self.ROWS, load_patterns(), repeat=1, variants=(Precompiled,))
+        self.assertIsNone(results[0]['speedup_vs_baseline'])
+
+    def test_invalid_arguments_are_rejected(self):
+        with self.assertRaises(ValueError):
+            benchmark([], load_patterns())
+        with self.assertRaises(ValueError):
+            benchmark(self.ROWS, load_patterns(), repeat=0)
+
+
+class ProfileTests(unittest.TestCase):
+    def test_counts_matches_per_pattern_and_sorts_by_time(self):
+        entries = profile_patterns(['a1 b22', 'c333'], [r'\d+', r'zzz'], repeat=1)
+        by_pattern = {entry['pattern']: entry for entry in entries}
+        self.assertEqual(by_pattern[r'\d+']['matches'], 3)
+        self.assertEqual(by_pattern['zzz']['matches'], 0)
+        self.assertEqual(by_pattern[r'\d+']['index'], 0)
+        seconds = [entry['seconds'] for entry in entries]
+        self.assertEqual(seconds, sorted(seconds, reverse=True))
+        self.assertTrue(all(0.0 <= entry['share'] <= 1.0 for entry in entries))
+
+    def test_invalid_repeat_is_rejected(self):
+        with self.assertRaises(ValueError):
+            profile_patterns(['a'], ['a'], repeat=0)
 
 
 if __name__ == '__main__':

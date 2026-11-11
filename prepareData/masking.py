@@ -7,6 +7,7 @@ import ast
 import functools
 import os
 import re
+import time
 
 SEQUENCE_SEPARATOR = ' ;-; '
 MASK = '<*>'
@@ -107,3 +108,68 @@ class CachedMessages(Precompiled):
 
 
 VARIANTS = (Baseline, Precompiled, CachedRows, CachedMessages)
+
+
+def benchmark(rows, patterns, repeat=3, variants=VARIANTS):
+    """Time each variant over rows (best of `repeat` runs, caches cleared before each run).
+
+    Every variant's output is compared with the baseline's, so a faster variant that changes the
+    masked text shows up as identical=False instead of looking like a win.
+    """
+    if len(rows) == 0:
+        raise ValueError('no rows to benchmark')
+    if repeat < 1:
+        raise ValueError('repeat must be at least 1')
+    expected = [Baseline(patterns)(row) for row in rows]
+    results = []
+    for variant in variants:
+        normalize = variant(patterns)
+        best = None
+        for _ in range(repeat):
+            normalize.reset()
+            start = time.perf_counter()
+            outputs = [normalize(row) for row in rows]
+            elapsed = time.perf_counter() - start
+            best = elapsed if best is None else min(best, elapsed)
+        wrong = [index for index, (got, want) in enumerate(zip(outputs, expected)) if got != want]
+        entry = {'name': normalize.name, 'seconds': best,
+                 'rows_per_second': len(rows) / best if best > 0 else None,
+                 'identical': not wrong, 'mismatches': len(wrong), 'first_mismatch': None,
+                 'cache': normalize.cache_info()}
+        if wrong:
+            entry['first_mismatch'] = {'row': wrong[0], 'got': outputs[wrong[0]][:200],
+                                       'expected': expected[wrong[0]][:200]}
+        results.append(entry)
+    base = next((entry['seconds'] for entry in results if entry['name'] == Baseline.name), None)
+    for entry in results:
+        entry['speedup_vs_baseline'] = base / entry['seconds'] if base and entry['seconds'] > 0 else None
+    return results
+
+
+def profile_patterns(rows, patterns, repeat=3):
+    """Time each pattern scanning the ellipsis-collapsed rows on its own, slowest first.
+
+    This shows which patterns are relatively expensive; it is not the cost inside the combined
+    alternation, which stops trying alternatives at a position once one matches.
+    """
+    if repeat < 1:
+        raise ValueError('repeat must be at least 1')
+    ellipsis = re.compile(ELLIPSIS_PATTERN)
+    collapsed = [ellipsis.sub(ELLIPSIS_REPLACEMENT, row) for row in rows]
+    entries = []
+    for index, pattern in enumerate(patterns):
+        compiled = re.compile(pattern)
+        best = None
+        for _ in range(repeat):
+            matches = 0
+            start = time.perf_counter()
+            for text in collapsed:
+                for _match in compiled.finditer(text):
+                    matches += 1
+            elapsed = time.perf_counter() - start
+            best = elapsed if best is None else min(best, elapsed)
+        entries.append({'index': index, 'pattern': pattern, 'seconds': best, 'matches': matches})
+    total = sum(entry['seconds'] for entry in entries)
+    for entry in entries:
+        entry['share'] = entry['seconds'] / total if total > 0 else 0.0
+    return sorted(entries, key=lambda entry: entry['seconds'], reverse=True)
