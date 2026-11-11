@@ -3,7 +3,8 @@ import tempfile
 import unittest
 
 from prepareData.masking import (DEFAULT_SOURCE, SEQUENCE_SEPARATOR, VARIANTS, Baseline, CachedMessages, CachedRows,
-                                 Normalizer, Precompiled, benchmark, load_patterns, profile_patterns)
+                                 Normalizer, Precompiled, audit_masking, benchmark, classify_residual,
+                                 load_patterns, profile_patterns)
 
 SAMPLES = [
     'Connection from 10.251.43.21:50010 refused ... retry in 5 seconds',
@@ -125,6 +126,52 @@ class ProfileTests(unittest.TestCase):
     def test_invalid_repeat_is_rejected(self):
         with self.assertRaises(ValueError):
             profile_patterns(['a'], ['a'], repeat=0)
+
+
+def identity(text):
+    return text
+
+
+class AuditTests(unittest.TestCase):
+    def test_classify_residual(self):
+        self.assertEqual(classify_residual('abc1'), ['has_digit'])
+        self.assertEqual(classify_residual('deadbeef'), ['hex_like'])
+        self.assertEqual(classify_residual('decade,'), ['hex_like'])
+        self.assertEqual(classify_residual('q' * 20), ['long'])
+        self.assertEqual(classify_residual('<*>'), [])
+        self.assertEqual(classify_residual('operation=<*>'), [])
+        self.assertEqual(classify_residual('service'), [])
+
+    def test_audit_counts_residual_and_singleton_tokens(self):
+        long_token = 'q' * 20
+        messages = ['service ok', 'service ok', 'cache decade failed', 'a very long identifier ' + long_token]
+        report = audit_masking(messages, identity)
+        self.assertEqual(report['messages'], 4)
+        self.assertEqual(report['distinct_raw_messages'], 3)
+        self.assertEqual(report['distinct_masked_messages'], 3)
+        self.assertEqual(report['masks_per_message'], 0.0)
+        self.assertEqual(report['messages_with_unmasked_tokens'], 2)
+        self.assertEqual(report['fraction_with_unmasked_tokens'], 0.5)
+        self.assertEqual(report['unmasked_occurrences_by_reason'], {'hex_like': 1, 'long': 1})
+        self.assertEqual(report['distinct_unmasked_tokens'], 2)
+        self.assertEqual([entry['token'] for entry in report['top_unmasked_tokens']], ['decade', long_token])
+        self.assertEqual(report['distinct_tokens'], 10)
+        self.assertEqual(report['singleton_tokens'], 8)
+        self.assertAlmostEqual(report['singleton_fraction'], 0.8)
+        self.assertIn('decade', report['singleton_samples'])
+
+    def test_audit_counts_masks_per_message(self):
+        report = audit_masking(['a7b7', 'c'], lambda text: text.replace('7', '<*>'))
+        self.assertEqual(report['masks_per_message'], 1.0)
+        self.assertEqual(report['unmasked_occurrences_by_reason'], {})
+
+    def test_audit_flags_a_surviving_digit(self):
+        report = audit_masking(['abc1 ok'], identity)
+        self.assertEqual(report['unmasked_occurrences_by_reason'], {'has_digit': 1})
+
+    def test_audit_rejects_no_messages(self):
+        with self.assertRaises(ValueError):
+            audit_masking([], identity)
 
 
 if __name__ == '__main__':

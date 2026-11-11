@@ -8,6 +8,7 @@ import functools
 import os
 import re
 import time
+from collections import Counter
 
 SEQUENCE_SEPARATOR = ' ;-; '
 MASK = '<*>'
@@ -15,6 +16,10 @@ ELLIPSIS_PATTERN = r'[.]{3,}'
 ELLIPSIS_REPLACEMENT = '.. '
 DEFAULT_SOURCE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'customDataset.py')
 CACHE_SIZE = 65536
+PUNCTUATION = '.,;:()[]{}"\'='
+HEX_WORD = re.compile(r'[0-9a-fA-F]{6,}')
+LONG_TOKEN_LENGTH = 20
+TOP_TOKENS = 20
 
 
 def load_patterns(source_path=DEFAULT_SOURCE):
@@ -173,3 +178,69 @@ def profile_patterns(rows, patterns, repeat=3):
     for entry in entries:
         entry['share'] = entry['seconds'] / total if total > 0 else 0.0
     return sorted(entries, key=lambda entry: entry['seconds'], reverse=True)
+
+
+def classify_residual(token):
+    """Reasons a token left after masking still looks like a variable value (empty if it does not).
+
+    has_digit should never occur: the last mask pattern matches any token containing a digit, so a
+    hit means a masking gap. hex_like and long are heuristics for identifiers the patterns miss.
+    """
+    core = token.replace(MASK, '').strip(PUNCTUATION)
+    reasons = []
+    if any(char.isdigit() for char in core):
+        reasons.append('has_digit')
+    if HEX_WORD.fullmatch(core):
+        reasons.append('hex_like')
+    if len(core) >= LONG_TOKEN_LENGTH:
+        reasons.append('long')
+    return reasons
+
+
+def audit_masking(messages, normalize, top=TOP_TOKENS):
+    """Report what is left after masking: unmasked variable-looking tokens and rarely seen tokens.
+
+    singleton tokens (seen once in the whole input) are a proxy for variable fields that leaked
+    through masking; they also include genuinely rare words, so read the samples before acting.
+    """
+    if len(messages) == 0:
+        raise ValueError('no messages to audit')
+    masked = [normalize(message) for message in messages]
+    residual = Counter()
+    reasons_by_token = {}
+    vocabulary = Counter()
+    mask_total = 0
+    with_residual = 0
+    for text in masked:
+        mask_total += text.count(MASK)
+        found = False
+        for token in text.split():
+            if token != MASK:
+                vocabulary[token] += 1
+            reasons = classify_residual(token)
+            if reasons:
+                residual[token] += 1
+                reasons_by_token[token] = reasons
+                found = True
+        with_residual += found
+    by_reason = Counter()
+    for token, count in residual.items():
+        for reason in reasons_by_token[token]:
+            by_reason[reason] += count
+    singletons = [token for token, count in vocabulary.items() if count == 1]
+    return {
+        'messages': len(messages),
+        'distinct_raw_messages': len(set(messages)),
+        'distinct_masked_messages': len(set(masked)),
+        'masks_per_message': mask_total / len(messages),
+        'messages_with_unmasked_tokens': with_residual,
+        'fraction_with_unmasked_tokens': with_residual / len(messages),
+        'unmasked_occurrences_by_reason': dict(by_reason),
+        'distinct_unmasked_tokens': len(residual),
+        'top_unmasked_tokens': [{'token': token, 'count': count, 'reasons': reasons_by_token[token]}
+                                for token, count in residual.most_common(top)],
+        'distinct_tokens': len(vocabulary),
+        'singleton_tokens': len(singletons),
+        'singleton_fraction': len(singletons) / len(vocabulary) if vocabulary else 0.0,
+        'singleton_samples': singletons[:top],
+    }
