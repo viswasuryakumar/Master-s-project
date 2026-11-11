@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from web.logtools import LogRecord, LogSequence
+from web.backend.log_processing import LogRecord, LogSequence
 
 
 def test_records_preserve_text_and_copy_metadata():
@@ -29,7 +29,7 @@ def test_sequence_requires_records_and_identifier():
     with pytest.raises(ValueError):
         LogSequence('', [LogRecord('x')])
 
-from web.logtools.validation import validate_log_mapping, validate_log_rows
+from web.backend.log_processing.validation import validate_log_mapping, validate_log_rows
 
 
 def test_validation_collects_row_and_field_errors():
@@ -46,7 +46,7 @@ def test_validation_enforces_length_nulls_and_metadata():
     with pytest.raises(ValueError):
         validate_log_mapping({}, max_message_length=0)
 
-from web.logtools.readers import read_records, LogReadError
+from web.backend.log_processing.readers import read_records, LogReadError
 
 
 def test_text_reader_handles_bom_and_blank_lines(tmp_path):
@@ -76,7 +76,7 @@ def test_csv_reader_supports_multiline_messages(tmp_path):
     with pytest.raises(LogReadError, match='message column'):
         list(read_records(path))
 
-from web.logtools.timestamps import parse_timestamp, time_bounds
+from web.backend.log_processing.timestamps import parse_timestamp, time_bounds
 
 
 def test_timestamp_offsets_epoch_and_explicit_local_formats():
@@ -99,7 +99,7 @@ def test_reader_retains_timestamp(tmp_path):
     path.write_text('{"message":"ok","timestamp":"2026-01-01T00:00:00Z"}\n')
     assert list(read_records(path))[0].timestamp == parse_timestamp('2026-01-01T00:00:00Z')
 
-from web.logtools.grouping import window_records, group_by_attribute, group_hdfs_blocks
+from web.backend.log_processing.grouping import window_records, group_by_attribute, group_hdfs_blocks
 
 
 def test_overlapping_windows_and_tail():
@@ -123,3 +123,16 @@ def test_hdfs_grouping_deduplicates_and_keeps_order():
     assert [s.identifier for s in groups] == ['blk_-2','blk_1']
     assert len(groups[1].records) == 2
     assert group_hdfs_blocks([LogRecord('ordinary')], missing='skip') == []
+
+from web.backend.log_processing.filters import filter_records
+
+
+def test_filters_combine_source_text_severity_and_time():
+    stamp = parse_timestamp('2026-01-01T00:00:00Z')
+    records = [LogRecord('Timeout', 'a', 'WARNING', stamp), LogRecord('timeout', 'b', 'ERROR', stamp), LogRecord('timeout', 'a')]
+    assert list(filter_records(records, source='a', contains='TIME', minimum_severity='warn', start=stamp, end=stamp)) == records[:1]
+    assert list(filter_records(records, contains='TIME', case_sensitive=True)) == []
+    with pytest.raises(ValueError):
+        list(filter_records(records, minimum_severity='bad'))
+    with pytest.raises(ValueError):
+        list(filter_records(records, start='2026-02-01T00:00:00Z', end=stamp))
