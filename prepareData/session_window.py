@@ -27,7 +27,7 @@ def collect_block_sessions(records, block_labels):
         block_id: int(label == 'Anomaly')
         for block_id, label in zip(block_labels['BlockId'], block_labels['Label'])
     }
-    # map(callable) preserves the original missing-label behavior (None/NaN).
+    # Missing block labels remain None/NaN.
     sessions['Label'] = sessions['BlockId'].map(labels_by_block.get)
     return sessions
 

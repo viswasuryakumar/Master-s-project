@@ -1,7 +1,4 @@
-"""Log parsing and sequence helpers derived from the existing LogLLM pipeline.
-
-Descriptive entry points coexist with the original public names below.
-"""
+"""Log parsing and sequence helpers derived from LogLLM."""
 import os
 from numbers import Integral
 import re
@@ -133,7 +130,7 @@ def export_sequence_split(sequences, output_dir, split_name):
     return serialized
 
 
-# Compatibility exports retain the original positional and keyword signatures.
+# Public log preparation names.
 fixedSize_window = build_fixed_windows
 sliding_window = build_time_windows
 log_to_dataframe = read_log_records

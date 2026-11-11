@@ -1,4 +1,4 @@
-"""LogLLM dataset adapters, refactored with legacy import compatibility."""
+"""LogLLM dataset loading, sampling, and batch preparation."""
 import os
 import re
 from itertools import accumulate, chain
@@ -34,7 +34,7 @@ combined_pattern = '|'.join(patterns)
 
 
 def normalize_log_message(text):
-    """Apply the original LogLLM masking rules in their original order."""
+    """Apply LogLLM masking rules in order."""
     compact_text = re.sub(r'[.]{3,}', '.. ', text)
     return re.sub(combined_pattern, '<*>', compact_text)
 
@@ -167,7 +167,7 @@ class LogBatchCollator:
         }
 
 
-# Preserve existing callers, keyword arguments, and old pickle lookup paths.
+# Public dataset and batch-processing names.
 replace_patterns = normalize_log_message
 merge_data = flatten_log_sequences
 CustomDataset = LogSequenceDataset
