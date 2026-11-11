@@ -98,3 +98,28 @@ def test_reader_retains_timestamp(tmp_path):
     path = tmp_path / 'rows.jsonl'
     path.write_text('{"message":"ok","timestamp":"2026-01-01T00:00:00Z"}\n')
     assert list(read_records(path))[0].timestamp == parse_timestamp('2026-01-01T00:00:00Z')
+
+from web.logtools.grouping import window_records, group_by_attribute, group_hdfs_blocks
+
+
+def test_overlapping_windows_and_tail():
+    rows = [LogRecord(str(i)) for i in range(5)]
+    assert [[r.message for r in s.records] for s in window_records(rows, 3, 2)] == [['0','1','2'],['2','3','4'],['4']]
+    assert window_records([]) == []
+    with pytest.raises(ValueError):
+        window_records(rows, size=True)
+
+
+def test_attribute_grouping_and_missing_policy():
+    rows = [LogRecord('a', attributes={'request': 'x'}), LogRecord('b'), LogRecord('c', attributes={'request': 'x'})]
+    assert [r.message for r in group_by_attribute(rows, 'request', 'skip')[0].records] == ['a','c']
+    with pytest.raises(ValueError, match='record 2'):
+        group_by_attribute(rows, 'request')
+
+
+def test_hdfs_grouping_deduplicates_and_keeps_order():
+    rows = [LogRecord('blk_1 blk_1 blk_-2'), LogRecord('blk_1')]
+    groups = group_hdfs_blocks(rows)
+    assert [s.identifier for s in groups] == ['blk_-2','blk_1']
+    assert len(groups[1].records) == 2
+    assert group_hdfs_blocks([LogRecord('ordinary')], missing='skip') == []
