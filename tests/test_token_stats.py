@@ -1,8 +1,11 @@
+import json
 import os
+import tempfile
 import unittest
 
 from prepareData.token_stats import (ANSWER_PREFIX_TEXT, PREFIX_TEXT, QUESTION_TEXT, describe,
-                                     llama_prompt_overhead, message_token_lengths, token_length_report)
+                                     llama_prompt_overhead, main, message_token_lengths, read_sequences,
+                                     token_length_report)
 
 BOS = 1
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -80,6 +83,40 @@ class ReportTests(unittest.TestCase):
     def test_no_sequences_is_rejected(self):
         with self.assertRaises(ValueError):
             token_length_report([], FakeBert(), FakeLlama())
+
+
+class CliTests(unittest.TestCase):
+    def write_csv(self, tmp):
+        path = os.path.join(tmp, 'train.csv')
+        with open(path, 'w') as stream:
+            stream.write('Content,Label,item_Label,session_length\n')
+            stream.write('a b ;-; c d e,0,"[0, 0]",2\n')
+            stream.write('x y z w ;-; q,1,"[0, 1]",2\n')
+        return path
+
+    def test_read_sequences_splits_normalizes_and_limits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self.write_csv(tmp)
+            self.assertEqual(read_sequences(path), [['a b', 'c d e'], ['x y z w', 'q']])
+            self.assertEqual(read_sequences(path, normalize=str.upper, limit=1), [['A B', 'C D E']])
+
+    def test_main_writes_report_and_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self.write_csv(tmp)
+            report = main(['--csv', path, '--bert-path', 'b', '--llama-path', 'l', '--no-normalize',
+                           '--max-content-len', '4', '--max-seq-len', '2'],
+                          load_tokenizers=lambda bert_path, llama_path: (FakeBert(), FakeLlama()))
+            with open(os.path.join(tmp, 'train_token_stats.json')) as stream:
+                saved = json.load(stream)
+            self.assertEqual(saved, report)
+            self.assertEqual(saved['source'], {'csv': path, 'normalized': False, 'windows': 2})
+            self.assertEqual(saved['bert_message_tokens']['count'], 4)
+            # Token counts are 4, 5, 6 and 3 with [CLS]/[SEP]; two exceed the limit of 4.
+            self.assertEqual(saved['bert_message_tokens']['over_limit'], 2)
+
+    def test_invalid_limits_are_rejected(self):
+        with self.assertRaises(SystemExit):
+            main(['--csv', 'x', '--bert-path', 'b', '--llama-path', 'l', '--max-seq-len', '0'])
 
 
 if __name__ == '__main__':
