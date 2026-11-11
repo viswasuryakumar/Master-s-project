@@ -179,3 +179,37 @@ def test_redaction_leaves_original_record_and_masks_metadata():
     assert rows[0].attributes['password'] == '[REDACTED]'
     assert counts['secret'] == 2
     assert redact_text('10.0.0.1', mask_addresses=False).text == '10.0.0.1'
+
+import csv
+import io
+from web.backend.log_processing.exports import records_to_csv, records_to_jsonl, export_records
+
+
+def test_csv_export_protects_formula_cells_and_quotes_messages():
+    rows = [LogRecord('=SUM(1,2)', source=' +command'), LogRecord('line\n"quoted"')]
+    parsed = list(csv.DictReader(io.StringIO(records_to_csv(rows))))
+    assert parsed[0]['message'].startswith("'=")
+    assert parsed[0]['source'].startswith("' +")
+    assert parsed[1]['message'] == 'line\n"quoted"'
+
+
+def test_jsonl_export_round_trip_and_no_clobber(tmp_path):
+    rows = [LogRecord('original', timestamp=parse_timestamp(0), attributes={'key': 'value'})]
+    path = tmp_path / 'records.jsonl'
+    export_records(rows, path)
+    assert list(read_records(path)) == rows
+    with pytest.raises(FileExistsError):
+        export_records([LogRecord('replacement')], path)
+    assert list(read_records(path)) == rows
+    export_records([LogRecord('replacement')], path, overwrite=True)
+    assert list(read_records(path))[0].message == 'replacement'
+    assert not list(tmp_path.glob('.records*'))
+
+
+def test_failed_export_does_not_leave_partial_output(tmp_path):
+    def broken():
+        yield LogRecord('first')
+        raise ValueError('interrupted')
+    with pytest.raises(ValueError):
+        export_records(broken(), tmp_path / 'out.jsonl')
+    assert not list(tmp_path.iterdir())
