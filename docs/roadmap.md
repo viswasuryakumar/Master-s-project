@@ -48,7 +48,7 @@ One tested commit per Tuesday, committed with the real date. Update status as ea
 | Week | Date | Item | Status |
 |---|---|---|---|
 | 1 | Oct 27 | Parse-quality report for raw logs (`prepareData/parse_report.py`) | done |
-| 2 | Nov 3 | Windowing manifest: config, dataset hash and seed saved beside each output | planned |
+| 2 | Nov 3 | Windowing manifest: config, dataset hash and seed saved beside each output (`prepareData/manifest.py`, `--seed` for `session_window.py`) | done (Nov 10) |
 | 3 | Nov 10 | Token-length stats for BERT messages and Llama windows | planned |
 | 4 | Nov 17 | Benchmark `replace_patterns` masking and add a masking audit of unmasked tokens | planned |
 | 5 | Nov 24 | Window-size sweep and fixed vs time-based comparison on BGL, recorded in `docs/` | planned |

@@ -47,3 +47,13 @@ python -m prepareData.parse_report --data-dir <dir> --log-name BGL.log
 This writes `<log_name>_parse_report.json` to the data directory with counts of blank, unparseable and empty-content
 lines, duplicate messages, the parse rate and a few unparseable examples. Pass `--log-format` for log names that do not
 contain `bgl`, `thunderbird`, `spirit` or `liberty`, and `--start-line`/`--end-line` to match a sliced run.
+
+## Windowing manifest
+
+`sliding_window.py` and `session_window.py` write `manifest.json` next to `train.csv` and `test.csv`. It records the
+script, window and split parameters, seed, git commit, Python and pandas versions, and the size and sha256 of the input
+log and each output file, plus window and anomaly counts. Pass `--skip-hash` to skip hashing very large logs.
+
+`session_window.py` shuffles sessions before the split and takes `--seed` (default 42), so the same seed gives the same
+train/test split. It was unseeded before, and every run produced a different split. The sliding-window split is
+chronological and has no seed.
