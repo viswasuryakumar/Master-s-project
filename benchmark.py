@@ -1,7 +1,14 @@
-"""Benchmark a fine-tuned log anomaly checkpoint against a labelled test split."""
+"""Benchmark a fine-tuned log anomaly checkpoint against a labelled test split.
+
+Examples
+--------
+    python benchmark.py --dataset BGL
+    python benchmark.py --dataset BGL --limit 200 --save-json outputs/bgl_scores.json
+"""
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from typing import Iterable, NamedTuple
 
@@ -14,9 +21,21 @@ from customDataset import CustomCollator, CustomDataset
 
 HERE = Path(__file__).resolve().parent
 
+DEFAULTS = {
+    "dataset": "BGL",
+    "batch_size": 1,
+    "limit": 0,
+    "content_limit": 100,
+    "sequence_limit": 128,
+    "new_tokens": 6,
+    "workers": 0,
+    "encoder_dir": HERE / "models" / "bert-base-uncased",
+    "decoder_dir": HERE / "models" / "Meta-Llama-3-8B",
+    "gpu": "auto",
+}
+
 # Keywords the decoder is trained to emit; anything else counts as "benign".
 LABEL_WORDS = {"anomalous": 1, "normal": 0}
-
 
 
 # --------------------------------------------------------------------------- #
@@ -178,3 +197,36 @@ class CheckpointBenchmark:
         print("\n-- scores --")
         for name in ("precision", "recall", "f1", "accuracy"):
             print(f"  {name:<10}{getattr(t, name):.4f}")
+
+
+def cli(argv: list[str] | None = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p.add_argument("--dataset", choices=["BGL", "HDFS", "Liberty", "Thunderbird"])
+    p.add_argument("--data", type=Path, help="test CSV; defaults to data/<dataset>/test.csv")
+    p.add_argument("--limit", type=int, help="score only the first N sequences (0 = all)")
+    p.add_argument("--batch-size", type=int)
+    p.add_argument("--content-limit", type=int)
+    p.add_argument("--sequence-limit", type=int)
+    p.add_argument("--new-tokens", type=int, help="max tokens generated per answer")
+    p.add_argument("--workers", type=int)
+    p.add_argument("--encoder-dir", type=Path)
+    p.add_argument("--decoder-dir", type=Path)
+    p.add_argument("--gpu", choices=["auto", "cuda", "mps", "cpu"])
+    p.add_argument("--checkpoint-dir", type=Path,
+                   help="adapter weights; defaults to ft_model_<dataset> beside this file")
+    p.add_argument("--save-json", type=Path, help="optional path to write the scores to")
+    p.set_defaults(**DEFAULTS)
+    opts = p.parse_args(argv)
+    sizes = (opts.batch_size, opts.content_limit, opts.sequence_limit, opts.new_tokens)
+    if min(sizes) < 1 or opts.limit < 0:
+        p.error("sizes must be positive and --limit must be non-negative")
+    return opts
+
+
+if __name__ == "__main__":
+    options = cli()
+    result = CheckpointBenchmark(options).execute()
+    if options.save_json:
+        options.save_json.parent.mkdir(parents=True, exist_ok=True)
+        options.save_json.write_text(json.dumps(result.as_dict(), indent=2) + "\n")
+        print(f"\nscores written to {options.save_json}")
