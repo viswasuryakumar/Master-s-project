@@ -10,6 +10,8 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from .recommendations import recommend
+from .log_records import read_log_lines
+from .sequence_grouping import build_message_windows, group_block_messages
 from . import comparison, data_quality
 from .engine import PROFILES, SCENARIOS, generate, classify, parse, explain
 
@@ -270,18 +272,16 @@ def import_collection(body:ImportInput):
     if body.sequences:
         sequences=[{'external_id':s.sequence_id,'logs':s.logs,'prediction':s.prediction,'score':s.score,'truth':s.ground_truth,'original_time':s.original_time,'block_id':s.block_id} for s in body.sequences]
     elif body.raw_text:
-        lines=[line for line in body.raw_text.splitlines() if line.strip()]
+        lines=read_log_lines(body.raw_text)
         if any(parse(body.profile,line)['original_time'] is None for line in lines):
             raise HTTPException(422,'Raw logs do not match the selected profile format. Use CSV/JSON prepared sequences for message-only records.')
         if body.profile=='HDFS':
-            groups={}
-            for line in lines:
-                blocks=set(re.findall(r'blk_-?\d+',line))
-                if not blocks:raise HTTPException(422,'Every HDFS raw message must contain a block ID; use prepared sequences for other records')
-                for block in sorted(blocks):groups.setdefault(block,[]).append(line)
-            sequences=[{'external_id':block,'block_id':block,'logs':logs} for block,logs in groups.items()]
+            try:
+                sequences=group_block_messages(lines)
+            except ValueError as error:
+                raise HTTPException(422,str(error)) from error
         else:
-            sequences=[{'external_id':f'window-{i//100+1:06}','logs':lines[i:i+100]} for i in range(0,len(lines),100)]
+            sequences=build_message_windows(lines)
     if body.use_bgl_labels:
         if body.profile!='BGL' or not body.raw_text:
             raise HTTPException(422,'BGL label evaluation requires a raw BGL file')
