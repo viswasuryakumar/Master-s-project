@@ -81,5 +81,23 @@ class SessionWindowManifestTests(ScriptRunner):
             self.assertNotEqual(self.read(train_path), first)
 
 
+BGL_LINE = '- 11178385%02d 2005.06.03 R02-M1-N0-C:J12-U11 2005-06-03-15.42.%02d.675872 R02-M1-N0-C:J12-U11 RAS KERNEL INFO event %d'
+
+
+class SlidingWindowManifestTests(ScriptRunner):
+    def test_manifest_records_window_settings_and_counts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, 'BGL.log'), 'w') as fout:
+                for i in range(20):
+                    fout.write(BGL_LINE % (i, i, i) + '\n')
+            self.run_module('prepareData.sliding_window', tmp, 'BGL.log', '--skip-hash')
+            manifest = json.loads(self.read(os.path.join(tmp, 'manifest.json')))
+            self.assertEqual(manifest['params']['window_size'], 100)
+            self.assertEqual(manifest['params']['split'], 'chronological')
+            self.assertIsNone(manifest['seed'])
+            self.assertEqual(manifest['stats']['train_windows'], 1)
+            self.assertNotIn('sha256', manifest['inputs'][os.path.join(tmp, 'BGL.log')])
+
+
 if __name__ == '__main__':
     unittest.main()
