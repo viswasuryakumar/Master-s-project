@@ -136,3 +136,25 @@ def test_filters_combine_source_text_severity_and_time():
         list(filter_records(records, minimum_severity='bad'))
     with pytest.raises(ValueError):
         list(filter_records(records, start='2026-02-01T00:00:00Z', end=stamp))
+
+from web.backend.log_processing.statistics import summarize_records, summarize_sequences
+
+
+def test_statistics_counts_duplicates_and_missing_times():
+    records = [LogRecord('same', 'b', 'WARNING'), LogRecord('same', 'a', 'WARN'), LogRecord('unique', timestamp=parse_timestamp(0))]
+    summary = summarize_records(records)
+    assert summary['records'] == 3
+    assert summary['duplicate_messages'] == 1
+    assert summary['severity_counts']['WARN'] == 2
+    assert summary['missing_timestamps'] == 2
+    assert summary['records_per_second'] is None
+    assert summary['repeated_messages'] == [{'message': 'same', 'count': 2}]
+
+
+def test_empty_and_sequence_statistics():
+    assert summarize_records([])['first_timestamp'] is None
+    assert summarize_sequences([])['mean_length'] is None
+    records = [LogRecord(str(i)) for i in range(5)]
+    summary = summarize_sequences(window_records(records, 3))
+    assert summary['record_memberships'] == 5
+    assert summary['median_length'] == 2.5
