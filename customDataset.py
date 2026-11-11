@@ -1,3 +1,5 @@
+from numbers import Integral
+
 import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset
@@ -146,12 +148,20 @@ class BalancedSampler(Sampler):
 
 class CustomCollator:
     def __init__(self, tokenizer, max_seq_len=128, max_content_len=100):
+        for name, value in (("max_seq_len", max_seq_len), ("max_content_len", max_content_len)):
+            if isinstance(value, bool) or not isinstance(value, Integral) or value <= 0:
+                raise ValueError(f"{name} must be a positive integer")
         self.tokenizer = tokenizer
         self.max_seq_len = max_seq_len
         self.max_content_len = max_content_len
 
     def __call__(self, batch):
+        if not batch:
+            raise ValueError("Cannot prepare an empty batch")
         sequences_, labels = zip(*batch)
+        for index, sequence in enumerate(sequences_):
+            if len(sequence) == 0:
+                raise ValueError(f"Sequence {index} is empty; every sequence needs a log message")
 
         sequences = [seq[:self.max_seq_len] for seq in sequences_]
 
