@@ -213,3 +213,41 @@ def test_failed_export_does_not_leave_partial_output(tmp_path):
     with pytest.raises(ValueError):
         export_records(broken(), tmp_path / 'out.jsonl')
     assert not list(tmp_path.iterdir())
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from web.backend import log_preview
+from web.backend.engine import generate
+
+
+def preview_client():
+    app = FastAPI()
+    log_preview.install(app)
+    return TestClient(app)
+
+
+@pytest.mark.parametrize('profile', ['BGL', 'HDFS', 'Liberty', 'Thunderbird'])
+def test_profile_preview_preserves_grouping_and_bounds_samples(profile):
+    logs = generate(profile, 0)['logs']
+    with preview_client() as client:
+        response = client.post('/api/log-preview', json={'profile': profile, 'raw_text': '\n'.join(logs), 'sample_limit': 2})
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result['total_records'] == len(logs)
+    assert result['grouping']['sequences'] == 1
+    assert result['sample_count'] == 2
+    assert result['redacted'] is True
+
+
+def test_preview_redacts_downloads_and_filters_messages():
+    line = generate('BGL', 0)['logs'][0] + ' password=example-value'
+    with preview_client() as client:
+        body = {'profile': 'BGL', 'raw_text': '\ufeff' + line}
+        response = client.post('/api/log-preview/export', json=body)
+        assert response.status_code == 200
+        assert 'example-value' not in response.text
+        assert '[REDACTED]' in response.text
+        assert client.post('/api/log-preview', json={**body, 'minimum_severity': 'ERROR'}).json()['sample_count'] == 0
+        assert client.post('/api/log-preview', json={**body, 'raw_text': 'bad log'}).status_code == 422
+        assert client.post('/api/log-preview', json={**body, 'raw_text': ' \n'}).status_code == 422
+        assert client.post('/api/log-preview', json={**body, 'sample_limit': 101}).status_code == 422

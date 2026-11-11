@@ -64,3 +64,16 @@ def read_records(path, format=None, max_records=None, max_bytes=20_000_000):
                 value = raw
             yield record_from_mapping(value, line_number)
             count += 1
+
+
+def read_text_records(text, max_records=100_000):
+    if isinstance(max_records, bool) or not isinstance(max_records, int) or max_records < 1:
+        raise ValueError('max_records must be a positive integer')
+    count = 0
+    for line_number, line in enumerate(text.removeprefix('\ufeff').splitlines(), 1):
+        if not line.strip():
+            continue
+        count += 1
+        if count > max_records:
+            raise LogReadError('input exceeds record limit')
+        yield record_from_mapping({'message': line}, line_number)

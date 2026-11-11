@@ -22,7 +22,7 @@ def parse_timestamp(value, assume_timezone=None):
             parsed = datetime.fromisoformat(text.replace('Z', '+00:00'))
         except ValueError:
             parsed = None
-            for pattern in ('%Y-%m-%d-%H.%M.%S.%f', '%y%m%d %H%M%S'):
+            for pattern in ('%Y-%m-%d-%H.%M.%S.%f', '%y%m%d %H%M%S', '%Y.%m.%d %H:%M:%S'):
                 try:
                     parsed = datetime.strptime(text, pattern)
                     break
