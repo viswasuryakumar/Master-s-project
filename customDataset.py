@@ -1,4 +1,3 @@
-"""LogLLM dataset loading, sampling, and batch preparation."""
 import os
 import re
 from itertools import accumulate, chain
@@ -19,22 +18,21 @@ patterns = [
     r'\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)\b',
     r'\b(Mon|Monday|Tue|Tuesday|Wed|Wednesday|Thu|Thursday|Fri|Friday|Sat|Saturday|Sun|Sunday)\b',
     r'\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})\s+\b',
-    r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d{1,5})?', #  IP
-    r'([0-9A-Fa-f]{2}:){11}[0-9A-Fa-f]{2}',   # Special MAC
-    r'([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}',   # MAC
-    r'[a-zA-Z0-9]*[:\.]*([/\\]+[^/\\\s\[\]]+)+[/\\]*',  # File Path
+    r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d{1,5})?',
+    r'([0-9A-Fa-f]{2}:){11}[0-9A-Fa-f]{2}',
+    r'([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}',
+    r'[a-zA-Z0-9]*[:\.]*([/\\]+[^/\\\s\[\]]+)+[/\\]*',
     r'\b[0-9a-fA-F]{8}\b',
     r'\b[0-9a-fA-F]{10}\b',
     r'(\w+[\w\.]*)@(\w+[\w\.]*)\-(\w+[\w\.]*)',
     r'(\w+[\w\.]*)@(\w+[\w\.]*)',
-    r'[a-zA-Z\.\:\-\_]*\d[a-zA-Z0-9\.\:\-\_]*',  # word have number
+    r'[a-zA-Z\.\:\-\_]*\d[a-zA-Z0-9\.\:\-\_]*',
 ]
 
 combined_pattern = '|'.join(patterns)
 
 
 def normalize_log_message(text):
-    """Apply LogLLM masking rules in order."""
     compact_text = re.sub(r'[.]{3,}', '.. ', text)
     return re.sub(combined_pattern, '<*>', compact_text)
 
@@ -68,7 +66,6 @@ class LogSequenceDataset(Dataset):
 
 
 def flatten_log_sequences(data):
-    """Return messages and each sequence's starting offset, including zero."""
     sequences = list(data)
     boundaries = list(accumulate(map(len, sequences), initial=0))[:-1]
     return list(chain.from_iterable(sequences)), boundaries
@@ -80,7 +77,7 @@ class ClassBalancedSampler(Sampler):
         self.dataset = dataset
         self.target_ratio = target_ratio
         self.max_samples = max_samples
-        self.min_samples = min_samples  # only if max_samples is None, min_samples can work
+        self.min_samples = min_samples
 
         self.normal_indices = np.where(self.labels == 0)[0]
         self.anomalous_indices = np.where(self.labels == 1)[0]
@@ -167,7 +164,7 @@ class LogBatchCollator:
         }
 
 
-# Public dataset and batch-processing names.
+
 replace_patterns = normalize_log_message
 merge_data = flatten_log_sequences
 CustomDataset = LogSequenceDataset

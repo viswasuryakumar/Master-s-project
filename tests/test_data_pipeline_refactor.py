@@ -1,4 +1,3 @@
-"""Public API, export schema, and CLI coverage for the data pipeline refactor."""
 import os
 from pathlib import Path
 import subprocess

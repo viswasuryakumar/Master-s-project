@@ -1,4 +1,3 @@
-"""Log parsing and sequence helpers derived from LogLLM."""
 import os
 from numbers import Integral
 import re
@@ -8,10 +7,6 @@ import pandas as pd
 
 
 def build_fixed_windows(raw_data, window_size, step_size):
-    """Group rows in input order, retaining a short final window.
-
-    Labels are reference answers: any anomalous event labels its window.
-    """
     for name, value in (("window_size", window_size), ("step_size", step_size)):
         if isinstance(value, bool) or not isinstance(value, Integral) or value <= 0:
             raise ValueError(f"{name} must be a positive integer")
@@ -95,7 +90,7 @@ def compile_log_format(logformat):
 def write_structured_log(input_dir, output_dir, log_name, log_format, start_line=0, end_line=None, use_cache=False):
     source_path = os.path.join(input_dir, log_name)
     destination_path = os.path.join(output_dir, log_name + "_structured.csv")
-    # Only whole-file parses can reuse a CSV without range metadata.
+
     if (use_cache and start_line == 0 and end_line is None
             and os.path.isfile(destination_path)
             and os.path.getmtime(destination_path) >= os.path.getmtime(source_path)):
@@ -110,7 +105,6 @@ def write_structured_log(input_dir, output_dir, log_name, log_format, start_line
 
 
 def export_sequence_split(sequences, output_dir, split_name):
-    """Write the existing CSV schema and summary text for one prepared split."""
     serialized = sequences.copy()
     serialized['session_length'] = serialized['Content'].map(len)
     serialized['Content'] = serialized['Content'].map(' ;-; '.join)
@@ -130,7 +124,7 @@ def export_sequence_split(sequences, output_dir, split_name):
     return serialized
 
 
-# Public log preparation names.
+
 fixedSize_window = build_fixed_windows
 sliding_window = build_time_windows
 log_to_dataframe = read_log_records

@@ -1,4 +1,3 @@
-"""Prepare ordered fixed-size sequences using the existing LogLLM formats."""
 import argparse
 import os.path
 
@@ -27,7 +26,6 @@ def select_log_format(log_name):
 
 
 def prepare_window_splits(records, window_size=100, step_size=100, train_ratio=0.8):
-    """Split before windowing; preserve the input order within each partition."""
     labeled_records = records.copy()
     labeled_records['Label'] = labeled_records['Label'].map(lambda label: int(label != '-'))
     split_position = int(train_ratio * len(labeled_records))

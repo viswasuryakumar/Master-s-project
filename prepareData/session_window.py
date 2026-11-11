@@ -1,4 +1,3 @@
-"""Prepare HDFS block sessions using the existing LogLLM dataset contract."""
 import argparse
 import os
 import re
@@ -17,7 +16,6 @@ DEFAULT_LOG_NAME = 'HDFS.log'
 
 
 def collect_block_sessions(records, block_labels):
-    """Keep each message once per referenced block and preserve message order."""
     messages_by_block = defaultdict(list)
     for message in tqdm(records['Content'], total=len(records)):
         for block_id in set(re.findall(r'(blk_-?\d+)', message)):
@@ -27,13 +25,12 @@ def collect_block_sessions(records, block_labels):
         block_id: int(label == 'Anomaly')
         for block_id, label in zip(block_labels['BlockId'], block_labels['Label'])
     }
-    # Missing block labels remain None/NaN.
+
     sessions['Label'] = sessions['BlockId'].map(labels_by_block.get)
     return sessions
 
 
 def partition_block_sessions(sessions, train_ratio=0.8):
-    """Retain the existing random session split and global pandas/NumPy RNG."""
     split_position = int(train_ratio * len(sessions))
     shuffled = sessions.sample(frac=1).reset_index(drop=True)
     return (shuffled.iloc[:split_position].copy(),
