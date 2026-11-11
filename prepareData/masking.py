@@ -3,12 +3,16 @@
 customDataset.py imports torch, so the patterns are read from its source with ast instead of
 importing it. Every variant here must give the same output as the original; benchmark() checks that.
 """
+import argparse
 import ast
 import functools
+import json
 import os
 import re
 import time
 from collections import Counter
+
+import pandas as pd
 
 SEQUENCE_SEPARATOR = ' ;-; '
 MASK = '<*>'
@@ -244,3 +248,56 @@ def audit_masking(messages, normalize, top=TOP_TOKENS):
         'singleton_fraction': len(singletons) / len(vocabulary) if vocabulary else 0.0,
         'singleton_samples': singletons[:top],
     }
+
+
+def read_rows(csv_path, limit=None):
+    """Read the Content column of a train/test csv: one string per window, messages joined by the separator."""
+    return pd.read_csv(csv_path, nrows=limit)['Content'].astype(str).tolist()
+
+
+def format_summary(report):
+    lines = []
+    for entry in report['benchmark']:
+        speedup = entry['speedup_vs_baseline']
+        speed = f'{speedup:.2f}x' if speedup is not None else 'n/a'
+        lines.append(f"{entry['name']:<16} {entry['seconds']:.3f}s  speedup {speed}  identical={entry['identical']}")
+    for entry in report['pattern_profile'][:3]:
+        lines.append(f"slow pattern #{entry['index']}: {entry['share']:.0%} of single-pattern time, "
+                     f"{entry['matches']} matches: {entry['pattern'][:60]}")
+    audit = report['audit']
+    lines.append(f"{audit['fraction_with_unmasked_tokens']:.2%} of messages keep a variable-looking token; "
+                 f"{audit['singleton_fraction']:.2%} of distinct tokens appear once; "
+                 f"has_digit occurrences: {audit['unmasked_occurrences_by_reason'].get('has_digit', 0)}")
+    return '\n'.join(lines)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Benchmark and audit log-message masking on a train/test csv.')
+    parser.add_argument('--csv', required=True, help='train.csv or test.csv from the windowing scripts')
+    parser.add_argument('--limit', type=int, default=None, help='only read the first N windows')
+    parser.add_argument('--repeat', type=int, default=3, help='timing runs per variant; the best is reported')
+    parser.add_argument('--top', type=int, default=TOP_TOKENS, help='how many tokens to list in the audit')
+    parser.add_argument('--output', help='json path; default <csv>_masking_report.json')
+    options = parser.parse_args(argv)
+    if options.repeat < 1 or options.top < 1:
+        parser.error('--repeat and --top must be positive')
+
+    patterns = load_patterns()
+    rows = read_rows(options.csv, options.limit)
+    messages = [message for row in rows for message in row.split(SEQUENCE_SEPARATOR)]
+    report = {
+        'source': {'csv': options.csv, 'rows': len(rows), 'messages': len(messages)},
+        'benchmark': benchmark(rows, patterns, options.repeat),
+        'pattern_profile': profile_patterns(rows, patterns, options.repeat),
+        'audit': audit_masking(messages, Baseline(patterns), options.top),
+    }
+    output = options.output or os.path.splitext(options.csv)[0] + '_masking_report.json'
+    with open(output, 'w') as stream:
+        json.dump(report, stream, indent=2)
+    print(format_summary(report))
+    print('Wrote ' + output)
+    return report
+
+
+if __name__ == '__main__':
+    main()

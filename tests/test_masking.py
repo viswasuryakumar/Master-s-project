@@ -1,10 +1,11 @@
+import json
 import os
 import tempfile
 import unittest
 
 from prepareData.masking import (DEFAULT_SOURCE, SEQUENCE_SEPARATOR, VARIANTS, Baseline, CachedMessages, CachedRows,
                                  Normalizer, Precompiled, audit_masking, benchmark, classify_residual,
-                                 load_patterns, profile_patterns)
+                                 load_patterns, main, profile_patterns, read_rows)
 
 SAMPLES = [
     'Connection from 10.251.43.21:50010 refused ... retry in 5 seconds',
@@ -172,6 +173,39 @@ class AuditTests(unittest.TestCase):
     def test_audit_rejects_no_messages(self):
         with self.assertRaises(ValueError):
             audit_masking([], identity)
+
+
+class CliTests(unittest.TestCase):
+    def write_csv(self, tmp):
+        path = os.path.join(tmp, 'train.csv')
+        with open(path, 'w') as stream:
+            stream.write('Content,Label\n')
+            stream.write('a 1 ;-; b 22,0\n')
+            stream.write('c ;-; d,1\n')
+        return path
+
+    def test_read_rows_returns_one_string_per_window_and_honors_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self.write_csv(tmp)
+            self.assertEqual(read_rows(path), ['a 1 ;-; b 22', 'c ;-; d'])
+            self.assertEqual(read_rows(path, limit=1), ['a 1 ;-; b 22'])
+
+    def test_main_writes_all_three_reports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self.write_csv(tmp)
+            report = main(['--csv', path, '--repeat', '1'])
+            with open(os.path.join(tmp, 'train_masking_report.json')) as stream:
+                saved = json.load(stream)
+            self.assertEqual(saved, report)
+            self.assertEqual(saved['source'], {'csv': path, 'rows': 2, 'messages': 4})
+            self.assertEqual([entry['name'] for entry in saved['benchmark']], [variant.name for variant in VARIANTS])
+            self.assertTrue(all(entry['identical'] for entry in saved['benchmark']))
+            self.assertEqual(len(saved['pattern_profile']), len(load_patterns()))
+            self.assertEqual(saved['audit']['messages'], 4)
+
+    def test_invalid_repeat_is_rejected(self):
+        with self.assertRaises(SystemExit):
+            main(['--csv', 'x.csv', '--repeat', '0'])
 
 
 if __name__ == '__main__':
