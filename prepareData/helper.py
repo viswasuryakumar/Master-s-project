@@ -1,4 +1,5 @@
 import os
+from numbers import Integral
 import re
 from datetime import datetime
 
@@ -6,6 +7,16 @@ import pandas as pd
 
 
 def fixedSize_window(raw_data, window_size, step_size):
+    """Group rows in input order, retaining a short final window.
+
+    Labels are reference answers: any anomalous event labels its window.
+    """
+    for name, value in (("window_size", window_size), ("step_size", step_size)):
+        if isinstance(value, bool) or not isinstance(value, Integral) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    missing = {"Content", "Label"} - set(raw_data.columns)
+    if missing:
+        raise ValueError(f"Missing window input columns: {sorted(missing)}")
     aggregated = [
         [
             raw_data['Content'].iloc[i:i + window_size].values,
@@ -14,7 +25,7 @@ def fixedSize_window(raw_data, window_size, step_size):
         ]
         for i in range(0, len(raw_data), step_size)
     ]
-    return pd.DataFrame(aggregated, columns=list(raw_data.columns) + ['item_Label'])
+    return pd.DataFrame(aggregated, columns=['Content', 'Label', 'item_Label'])
 
 
 def sliding_window(raw_data, para):

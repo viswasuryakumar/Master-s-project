@@ -14,6 +14,15 @@ from customDataset import CustomDataset, CustomCollator
 ROOT_DIR = Path(__file__).resolve().parent
 
 
+def build_eval_dataloader(dataset, tokenizer, batch_size=1, max_seq_len=128,
+                          max_content_len=100):
+    """Keep prediction order aligned with dataset labels, including the tail batch."""
+    collator = CustomCollator(tokenizer, max_seq_len=max_seq_len,
+                              max_content_len=max_content_len)
+    return DataLoader(dataset, batch_size=batch_size, collate_fn=collator,
+                      num_workers=0, shuffle=False, drop_last=False)
+
+
 def parse_prediction(text):
     match = re.search(r"\b(normal|anomalous)\b", text, re.IGNORECASE)
     if not match:
@@ -123,10 +132,9 @@ def main():
                    is_train_mode=False, device=device,
                    max_content_len=args.max_content_len, max_seq_len=args.max_seq_len,
                    max_new_tokens=args.max_new_tokens)
-    collator = CustomCollator(model.Bert_tokenizer, max_seq_len=args.max_seq_len,
-                              max_content_len=args.max_content_len)
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, collate_fn=collator,
-                            num_workers=0, shuffle=False, drop_last=False)
+    dataloader = build_eval_dataloader(
+        dataset, model.Bert_tokenizer, batch_size=args.batch_size,
+        max_seq_len=args.max_seq_len, max_content_len=args.max_content_len)
     evalModel(model, dataloader, device=device, output_dir=output_dir, trace_output=args.trace_output)
     metadata = {"dataset": args.dataset, "data": str(data_path.resolve()),
                 "checkpoint": str(checkpoint.resolve()), "device": str(device),
