@@ -45,3 +45,33 @@ def test_validation_enforces_length_nulls_and_metadata():
     assert not validate_log_mapping({'message': ' ok ', 'attributes': {'count': '1'}})
     with pytest.raises(ValueError):
         validate_log_mapping({}, max_message_length=0)
+
+from web.logtools.readers import read_records, LogReadError
+
+
+def test_text_reader_handles_bom_and_blank_lines(tmp_path):
+    path = tmp_path / 'input.log'
+    path.write_bytes(b'\xef\xbb\xbf first \r\n\r\nsecond\n')
+    assert [row.message for row in read_records(path)] == [' first ', 'second']
+    with pytest.raises(LogReadError, match='record limit'):
+        list(read_records(path, max_records=1))
+    with pytest.raises(LogReadError, match='byte limit'):
+        list(read_records(path, max_bytes=1))
+
+
+def test_jsonl_reader_reports_line_numbers(tmp_path):
+    path = tmp_path / 'input.jsonl'
+    path.write_text('{"message":"ok","source":"host"}\n\nnot-json\n')
+    iterator = read_records(path)
+    assert next(iterator).source == 'host'
+    with pytest.raises(LogReadError, match='line 3'):
+        next(iterator)
+
+
+def test_csv_reader_supports_multiline_messages(tmp_path):
+    path = tmp_path / 'input.csv'
+    path.write_text('message,source\n"first\nsecond",server\n')
+    assert list(read_records(path))[0].message == 'first\nsecond'
+    path.write_text('other\nvalue\n')
+    with pytest.raises(LogReadError, match='message column'):
+        list(read_records(path))
