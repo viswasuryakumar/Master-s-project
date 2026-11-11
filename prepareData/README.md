@@ -72,3 +72,28 @@ tokens: each message becomes one projected vector, so a window's Llama input is 
 `--max-seq-len` (default 128) message vectors. The report gives the prompt size, messages per window, the share of
 windows over `--max-seq-len`, and BERT tokens per window. Rows are normalized like `LogSequenceDataset`, which needs
 `torch`; pass `--no-normalize` to skip that. Use `--limit N` for a quick look at the first N windows.
+
+## Masking benchmark and audit
+
+`customDataset.normalize_log_message` (`replace_patterns`) masks numbers, addresses, hex values and paths with `<*>`.
+To time it against alternatives and see what it leaves behind:
+
+```
+python -m prepareData.masking --csv <data_dir>/train.csv [--limit 2000] [--repeat 3]
+```
+
+It writes `train_masking_report.json` and prints a summary with three parts:
+
+- **benchmark**: the original, precompiled regexes, a whole-window cache and a per-message cache. Each variant's output is
+  compared with the original, so a variant that changes the masked text shows `identical=False` and is not a valid
+  replacement. The per-message cache only matches the original if no pattern spans the `;-;` separator, which the
+  comparison checks on your data.
+- **pattern profile**: each pattern timed on its own, slowest first. This shows relative cost, not the cost inside the
+  combined alternation.
+- **audit**: masks per message, distinct messages before and after masking, tokens that still look like variable values
+  (hex-like or very long), and tokens seen only once. `has_digit` should be zero because the last pattern masks any
+  token with a digit; a non-zero value is a masking gap. Singleton tokens include rare real words, so read the samples
+  before changing a pattern.
+
+The patterns are read from `customDataset.py` with `ast`, so the module runs without `torch` and always uses the
+pipeline's current patterns. Timings depend on the data and machine; record results from a real BGL run in `docs/`.
