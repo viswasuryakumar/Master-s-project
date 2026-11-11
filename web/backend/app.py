@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from .recommendations import recommend
-from . import comparison
+from . import comparison, data_quality
 from .engine import PROFILES, SCENARIOS, generate, classify, parse, explain
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -453,6 +453,7 @@ def archive_results(identifier:str):
         return [dict(r,logs=json.loads(r['logs'])) for r in rows]
 
 comparison.install(app,db,bump)
+data_quality.install(app,db)
 
 DIST=ROOT/'frontend'/'dist'
 if DIST.exists():app.mount('/assets',StaticFiles(directory=DIST/'assets'),name='assets')
