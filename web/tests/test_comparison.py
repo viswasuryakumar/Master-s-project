@@ -208,3 +208,75 @@ def test_invalid_detector_prediction_is_excluded(client, monkeypatch):
     assert failed['status'] == 'failed'
     assert failed['prediction'] is None
     assert failed['error'] == 'Detector could not process this sequence.'
+
+
+@pytest.mark.parametrize('identifier', ['=1+1', '+formula', '-formula', '@formula'])
+def test_comparison_csv_keeps_sequence_ids_as_text(client, identifier):
+    import csv
+    import io
+
+    run = new_run(client, [{'sequence_id': identifier, 'logs': ['routine'], 'ground_truth': 'normal'}])
+    finished(run)
+    response = client.get(f'/api/runs/{run}/comparison/export?format=csv')
+    assert response.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(response.text)))
+    predictions = [row for row in rows if row['record_type'] == 'prediction']
+    assert len(predictions) == 4
+    assert all(row['sequence_id'] == "'" + identifier for row in predictions)
+    exported = client.get(f'/api/runs/{run}/comparison/export?format=json').json()
+    assert exported['sequences'][0]['external_id'] == identifier
+
+
+def test_repeated_comparison_processing_keeps_results_unchanged(client):
+    run = new_run(client, [{'sequence_id': 'repeat-safe', 'logs': ['connection refused'], 'ground_truth': 'anomalous'}])
+    finished(run)
+    endpoint = f'/api/runs/{run}/comparison'
+    before = client.get(endpoint + '/export?format=json').json()
+    job = client.post(endpoint).json()
+    for _ in range(3):
+        client.post(endpoint)
+        module.tick()
+    after = client.get(endpoint + '/export?format=json').json()
+    assert after == before
+    with module.db() as connection:
+        count = connection.execute(
+            'SELECT COUNT(*) FROM comparison_predictions WHERE job_id=?', (job['id'],),
+        ).fetchone()[0]
+    assert count == 4
+
+
+def test_comparison_runs_keep_same_external_ids_separate(client):
+    first = new_run(client, [{'sequence_id': 'shared-id', 'logs': ['routine'], 'ground_truth': 'normal'}])
+    finished(first)
+    endpoint = f'/api/runs/{first}/comparison'
+    before = client.get(endpoint + '/export?format=json').json()
+    second = new_run(client, [{'sequence_id': 'shared-id', 'logs': ['uncorrectable memory parity failure'], 'ground_truth': 'anomalous'}])
+    finished(second)
+    other = client.get(f'/api/runs/{second}/comparison/export?format=json').json()
+    assert client.get(endpoint + '/export?format=json').json() == before
+    assert before['sequences'][0]['seq_id'] != other['sequences'][0]['seq_id']
+    assert before['sequences'][0]['ground_truth'] == 'normal'
+    assert other['sequences'][0]['ground_truth'] == 'anomalous'
+    assert before['summary']['coverage']['evaluated'] == 1
+    assert other['summary']['coverage']['evaluated'] == 1
+
+
+def test_detector_failures_hide_internal_error_details(client, monkeypatch):
+    original = comparison.predict
+
+    def predict(detector, profile, logs):
+        if detector.id == 'deeplog':
+            raise RuntimeError('Private backend diagnostic detail')
+        return original(detector, profile, logs)
+
+    monkeypatch.setattr(comparison, 'predict', predict)
+    run = new_run(client, [{'sequence_id': 'failed-adapter', 'logs': ['routine'], 'ground_truth': 'normal'}])
+    summary = finished(run)
+    response = client.get(f'/api/runs/{run}/comparison/export?format=json')
+    assert 'Private backend diagnostic detail' not in response.text
+    predictions = response.json()['sequences'][0]['predictions']
+    failed = next(item for item in predictions if item['detector_id'] == 'deeplog')
+    assert failed['error'] == 'Detector could not process this sequence.'
+    assert failed['prediction'] is None
+    assert summary['coverage']['evaluated'] == 0
+
