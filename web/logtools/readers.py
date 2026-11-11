@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from .records import LogRecord
+from .timestamps import parse_timestamp
 from .validation import validate_log_mapping
 
 
@@ -20,8 +21,12 @@ def record_from_mapping(value, line_number):
     issues = validate_log_mapping(value, line_number)
     if issues:
         raise LogReadError('; '.join(f'line {issue.row}: {issue.field}: {issue.message}' for issue in issues))
+    try:
+        timestamp = parse_timestamp(value['timestamp']) if value.get('timestamp') not in (None, '') else None
+    except ValueError as error:
+        raise LogReadError(f'line {line_number}: {error}') from error
     return LogRecord(value['message'], value.get('source', ''), value.get('severity', 'UNKNOWN'),
-                     attributes=value.get('attributes', {}))
+                     timestamp=timestamp, attributes=value.get('attributes', {}))
 
 
 def read_records(path, format=None, max_records=None, max_bytes=20_000_000):

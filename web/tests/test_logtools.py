@@ -75,3 +75,26 @@ def test_csv_reader_supports_multiline_messages(tmp_path):
     path.write_text('other\nvalue\n')
     with pytest.raises(LogReadError, match='message column'):
         list(read_records(path))
+
+from web.logtools.timestamps import parse_timestamp, time_bounds
+
+
+def test_timestamp_offsets_epoch_and_explicit_local_formats():
+    expected = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert parse_timestamp('2026-01-01T02:00:00+02:00') == expected
+    assert parse_timestamp(expected.timestamp()) == expected
+    assert parse_timestamp('2026-01-01-00.00.00.000000', timezone.utc) == expected
+    assert parse_timestamp('260101 000000', timezone.utc) == expected
+    assert time_bounds([LogRecord('a'), LogRecord('b', timestamp=expected)]) == (expected, expected)
+
+
+@pytest.mark.parametrize('value', [True, float('nan'), float('inf'), 'bad', '2026-01-01'])
+def test_invalid_or_ambiguous_timestamps(value):
+    with pytest.raises(ValueError):
+        parse_timestamp(value)
+
+
+def test_reader_retains_timestamp(tmp_path):
+    path = tmp_path / 'rows.jsonl'
+    path.write_text('{"message":"ok","timestamp":"2026-01-01T00:00:00Z"}\n')
+    assert list(read_records(path))[0].timestamp == parse_timestamp('2026-01-01T00:00:00Z')
