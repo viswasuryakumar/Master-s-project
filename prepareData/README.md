@@ -57,3 +57,18 @@ log and each output file, plus window and anomaly counts. Pass `--skip-hash` to 
 `session_window.py` shuffles sessions before the split and takes `--seed` (default 42), so the same seed gives the same
 train/test split. It was unseeded before, and every run produced a different split. The sliding-window split is
 chronological and has no seed.
+
+## Token-length statistics
+
+Check whether the window and length limits fit the model before a training or evaluation run:
+
+```
+python -m prepareData.token_stats --csv <data_dir>/train.csv --bert-path <bert> --llama-path <llama>
+```
+
+It writes `train_token_stats.json` and prints a summary. BERT sees every message, truncated to `--max-content-len`
+(default 100), so the report gives message token percentiles and how many exceed the limit. Llama does not see message
+tokens: each message becomes one projected vector, so a window's Llama input is a fixed prompt plus at most
+`--max-seq-len` (default 128) message vectors. The report gives the prompt size, messages per window, the share of
+windows over `--max-seq-len`, and BERT tokens per window. Rows are normalized like `LogSequenceDataset`, which needs
+`torch`; pass `--no-normalize` to skip that. Use `--limit N` for a quick look at the first N windows.
