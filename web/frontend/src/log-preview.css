@@ -1,0 +1,23 @@
+.log-preview-panel { border: 1px solid #dce2ed; border-radius: 12px; padding: 16px; background: #f8fafc; }
+.log-preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.log-preview-heading h3 { margin: 0 0 5px; font-size: 15px; }
+.log-preview-heading p, .log-preview-note { margin: 6px 0; color: #5c687c; font-size: 12px; line-height: 1.5; }
+.log-preview-controls { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin: 14px 0; }
+.log-preview-controls label { display: grid; gap: 6px; font-size: 12px; }
+.log-preview-mask { display: flex !important; align-items: center; gap: 8px; font-size: 12px; }
+.log-preview-mask input { width: auto; }
+.log-preview-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0; }
+.log-preview-stats dt { font-size: 11px; color: #5c687c; }
+.log-preview-stats dd { margin: 5px 0 0; font-size: 22px; font-weight: 600; }
+.log-preview-downloads { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.log-preview-table { max-height: 320px; overflow: auto; border: 1px solid #dce2ed; border-radius: 8px; }
+.log-preview-table table { width: 100%; text-align: left; border-collapse: collapse; }
+.log-preview-table th, .log-preview-table td { padding: 9px; vertical-align: top; border-bottom: 1px solid #e2e8f0; font-size: 11px; }
+.log-preview-table th { background: #eef2f7; position: sticky; top: 0; }
+.log-preview-table pre { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 220px; margin: 0; font-size: 11px; }
+.log-preview-table > p { padding: 12px; font-size: 12px; }
+@media (max-width: 640px) {
+  .log-preview-heading { align-items: flex-start; flex-direction: column; }
+  .log-preview-controls { grid-template-columns: 1fr; }
+  .log-preview-stats { grid-template-columns: repeat(2, 1fr); }
+}

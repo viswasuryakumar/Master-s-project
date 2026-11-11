@@ -251,3 +251,16 @@ def test_preview_redacts_downloads_and_filters_messages():
         assert client.post('/api/log-preview', json={**body, 'raw_text': 'bad log'}).status_code == 422
         assert client.post('/api/log-preview', json={**body, 'raw_text': ' \n'}).status_code == 422
         assert client.post('/api/log-preview', json={**body, 'sample_limit': 101}).status_code == 422
+
+
+def test_preview_is_registered_on_current_application():
+    from web.backend.app import app
+    client = TestClient(app)
+    try:
+        response = client.post('/api/log-preview', json={
+            'profile': 'BGL', 'raw_text': generate('BGL', 0)['logs'][0],
+        })
+        assert response.status_code == 200
+        assert response.json()['sample_count'] == 1
+    finally:
+        client.close()
