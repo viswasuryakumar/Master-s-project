@@ -158,3 +158,24 @@ def test_empty_and_sequence_statistics():
     summary = summarize_sequences(window_records(records, 3))
     assert summary['record_memberships'] == 5
     assert summary['median_length'] == 2.5
+
+from web.backend.log_processing.redaction import redact_text, redact_records
+
+
+def test_redaction_covers_assignments_bearer_email_and_ipv4():
+    result = redact_text('password="example value" Bearer example-token user@example.org 10.2.3.4 999.2.3.4')
+    assert 'example value' not in result.text
+    assert 'example-token' not in result.text
+    assert '[EMAIL]' in result.text and '[IP]' in result.text
+    assert '999.2.3.4' in result.text
+    assert result.counts == {'secret': 1, 'bearer': 1, 'email': 1, 'address': 1}
+
+
+def test_redaction_leaves_original_record_and_masks_metadata():
+    record = LogRecord('api_key=placeholder', source='10.0.0.1', attributes={'password': 'example'})
+    rows, counts = redact_records([record])
+    assert record.message == 'api_key=placeholder'
+    assert record.attributes['password'] == 'example'
+    assert rows[0].attributes['password'] == '[REDACTED]'
+    assert counts['secret'] == 2
+    assert redact_text('10.0.0.1', mask_addresses=False).text == '10.0.0.1'
