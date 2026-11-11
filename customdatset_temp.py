@@ -1,8 +1,3 @@
-"""Temporary copy of selected components from customDataset.py.
-
-The existing module supplies normalization; the pipeline continues to use it.
-"""
-
 import numpy as np
 import pandas as pd
 import torch
