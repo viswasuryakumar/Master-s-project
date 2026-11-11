@@ -1,22 +1,14 @@
+import os
+import re
+from itertools import accumulate, chain
 from numbers import Integral
 
 import numpy as np
 import pandas as pd
-from torch.utils.data import Dataset
-import re
-from torch.utils.data import Sampler
 import torch
-import os
+from torch.utils.data import Dataset, Sampler
+
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-#
-# patterns = [
-#     # r'[a-zA-Z0-9]+\.[a-zA-Z0-9]+',
-# ]
-#
-# combined_pattern = '|'.join(patterns)
-#
-# def replace_patterns(text):
-#     return re.sub(combined_pattern, '<*>', text)
 
 patterns = [
     r'True',
@@ -26,40 +18,42 @@ patterns = [
     r'\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)\b',
     r'\b(Mon|Monday|Tue|Tuesday|Wed|Wednesday|Thu|Thursday|Fri|Friday|Sat|Saturday|Sun|Sunday)\b',
     r'\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})\s+\b',
-    r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d{1,5})?', #  IP
-    r'([0-9A-Fa-f]{2}:){11}[0-9A-Fa-f]{2}',   # Special MAC
-    r'([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}',   # MAC
-    r'[a-zA-Z0-9]*[:\.]*([/\\]+[^/\\\s\[\]]+)+[/\\]*',  # File Path
+    r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d{1,5})?',
+    r'([0-9A-Fa-f]{2}:){11}[0-9A-Fa-f]{2}',
+    r'([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}',
+    r'[a-zA-Z0-9]*[:\.]*([/\\]+[^/\\\s\[\]]+)+[/\\]*',
     r'\b[0-9a-fA-F]{8}\b',
     r'\b[0-9a-fA-F]{10}\b',
     r'(\w+[\w\.]*)@(\w+[\w\.]*)\-(\w+[\w\.]*)',
     r'(\w+[\w\.]*)@(\w+[\w\.]*)',
-    r'[a-zA-Z\.\:\-\_]*\d[a-zA-Z0-9\.\:\-\_]*',  # word have number
+    r'[a-zA-Z\.\:\-\_]*\d[a-zA-Z0-9\.\:\-\_]*',
 ]
 
 combined_pattern = '|'.join(patterns)
 
-def replace_patterns(text):
-    text = re.sub(r'[\.]{3,}', '.. ', text)    # Replace multiple '.' with '.. '
-    text = re.sub(combined_pattern, '<*>', text)
-    return text
+
+def normalize_log_message(text):
+    compact_text = re.sub(r'[.]{3,}', '.. ', text)
+    return re.sub(combined_pattern, '<*>', compact_text)
 
 
-class CustomDataset(Dataset):
+class LogSequenceDataset(Dataset):
     def __init__(self, file_path, drop_duplicates=False, max_samples=None):
-        # Bound the CSV read before expensive normalization for local smoke runs.
-        df = pd.read_csv(file_path, nrows=max_samples)
-        print('Number of normal samples in original dataset: {}'.format((df['Label'].values==0).sum()))
-        print('Number of anomalous samples in original dataset: {}'.format((df['Label'].values==1).sum()))
-        df['Content'] = df['Content'].apply(replace_patterns)
+        records = pd.read_csv(file_path, nrows=max_samples)
+        self._report_counts(records['Label'].values, 'in original dataset')
+        records['Content'] = records['Content'].map(normalize_log_message)
         if drop_duplicates:
-            df = df.drop_duplicates(subset='Content', keep='first')
-        contents = df['Content'].values
-        self.sequences = np.array([content.split(' ;-; ') for content in contents], dtype=object)
-        self.labels = df['Label'].values
+            records = records.drop_duplicates(subset='Content', keep='first')
+        self.sequences = np.array(
+            [message.split(' ;-; ') for message in records['Content']], dtype=object)
+        self.labels = records['Label'].values
         if drop_duplicates:
-            print('Number of normal samples after dropping duplicates: {}'.format((self.labels==0).sum()))
-            print('Number of anomalous samples after dropping duplicates: {}'.format((self.labels==1).sum()))
+            self._report_counts(self.labels, 'after dropping duplicates')
+
+    @staticmethod
+    def _report_counts(labels, description):
+        for value, category in ((0, 'normal'), (1, 'anomalous')):
+            print(f'Number of {category} samples {description}: {(labels == value).sum()}')
 
     def __len__(self):
         return len(self.labels)
@@ -70,27 +64,20 @@ class CustomDataset(Dataset):
     def get_label(self):
         return self.labels
 
-def merge_data(data):
-    merged_data = []
 
-    start_positions = []
-
-    current_position = 0
-    for sublist in data:
-        start_positions.append(current_position)
-        merged_data.extend(sublist)
-        current_position += len(sublist)
-
-    return merged_data, start_positions
+def flatten_log_sequences(data):
+    sequences = list(data)
+    boundaries = list(accumulate(map(len, sequences), initial=0))[:-1]
+    return list(chain.from_iterable(sequences)), boundaries
 
 
-class BalancedSampler(Sampler):
+class ClassBalancedSampler(Sampler):
     def __init__(self, dataset, target_ratio=0.3, max_samples=None, min_samples=50000):
         self.labels = dataset.get_label()
         self.dataset = dataset
         self.target_ratio = target_ratio
         self.max_samples = max_samples
-        self.min_samples = min_samples  # only if max_samples is None, min_samples can work
+        self.min_samples = min_samples
 
         self.normal_indices = np.where(self.labels == 0)[0]
         self.anomalous_indices = np.where(self.labels == 1)[0]
@@ -118,35 +105,35 @@ class BalancedSampler(Sampler):
 
 
     def __iter__(self):
-        oversampled_minority = np.tile(self.minority_indices, int(self.minority_count / len(self.minority_indices)))
-        oversampled_minority_ = np.random.choice(
+        minority_repeats = np.tile(self.minority_indices, int(self.minority_count / len(self.minority_indices)))
+        minority_remainder = np.random.choice(
             self.minority_indices,
-            self.minority_count - len(oversampled_minority),
+            self.minority_count - len(minority_repeats),
             replace=False
         )
-        combined_indices = np.concatenate([self.majority_indices, oversampled_minority, oversampled_minority_])
-        if len(combined_indices) > self.total_size:
-            combined_indices = np.random.choice(
-                combined_indices,
+        sample_indices = np.concatenate([self.majority_indices, minority_repeats, minority_remainder])
+        if len(sample_indices) > self.total_size:
+            sample_indices = np.random.choice(
+                sample_indices,
                 self.total_size,
                 replace=False
             )
         else:
-            combined_indices = np.tile(combined_indices, int(self.total_size/len(combined_indices)))
-            combined_indices_ = np.random.choice(
-                combined_indices,
-                self.total_size-len(combined_indices),
+            sample_indices = np.tile(sample_indices, int(self.total_size/len(sample_indices)))
+            batch_remainder = np.random.choice(
+                sample_indices,
+                self.total_size-len(sample_indices),
                 replace=False
             )
-            combined_indices = np.concatenate([combined_indices, combined_indices_])
-            np.random.shuffle(combined_indices)
-        return iter(combined_indices)
+            sample_indices = np.concatenate([sample_indices, batch_remainder])
+            np.random.shuffle(sample_indices)
+        return iter(sample_indices)
 
     def __len__(self):
         return self.total_size
 
 
-class CustomCollator:
+class LogBatchCollator:
     def __init__(self, tokenizer, max_seq_len=128, max_content_len=100):
         for name, value in (("max_seq_len", max_seq_len), ("max_content_len", max_content_len)):
             if isinstance(value, bool) or not isinstance(value, Integral) or value <= 0:
@@ -158,34 +145,28 @@ class CustomCollator:
     def __call__(self, batch):
         if not batch:
             raise ValueError("Cannot prepare an empty batch")
-        sequences_, labels = zip(*batch)
-        for index, sequence in enumerate(sequences_):
-            if len(sequence) == 0:
-                raise ValueError(f"Sequence {index} is empty; every sequence needs a log message")
-
-        sequences = [seq[:self.max_seq_len] for seq in sequences_]
-
-        data, seq_positions = merge_data(sequences)
-        seq_positions = seq_positions[1:]
-
-        inputs = self.tokenizer(
-            data,
-            return_tensors="pt",
-            max_length=self.max_content_len,
-            padding=True,
-            truncation=True
-        )
-
-        # labels_tensor = torch.tensor(labels, dtype=torch.long)
-
-        labels = np.array(labels).astype(object)
-
-        labels[labels == 0] = 'normal'
-        labels[labels == 1] = 'anomalous'
-
+        message_groups, reference_labels = zip(*batch)
+        for position, messages in enumerate(message_groups):
+            if len(messages) == 0:
+                raise ValueError(f"Sequence {position} is empty; every sequence needs a log message")
+        bounded_groups = [messages[:self.max_seq_len] for messages in message_groups]
+        message_rows, starts = flatten_log_sequences(bounded_groups)
+        encoded_rows = self.tokenizer(
+            message_rows, return_tensors="pt", max_length=self.max_content_len,
+            padding=True, truncation=True)
+        label_names = np.array(reference_labels).astype(object)
+        label_names[label_names == 0] = 'normal'
+        label_names[label_names == 1] = 'anomalous'
         return {
-            "inputs": inputs,
-            "seq_positions": torch.tensor(seq_positions, dtype=torch.long),
-            # "labels": labels_tensor
-            "labels": labels
+            "inputs": encoded_rows,
+            "seq_positions": torch.tensor(starts[1:], dtype=torch.long),
+            "labels": label_names,
         }
+
+
+
+replace_patterns = normalize_log_message
+merge_data = flatten_log_sequences
+CustomDataset = LogSequenceDataset
+BalancedSampler = ClassBalancedSampler
+CustomCollator = LogBatchCollator
