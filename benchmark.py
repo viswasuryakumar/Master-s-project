@@ -1,9 +1,13 @@
 """Benchmark a fine-tuned log anomaly checkpoint against a labelled test split."""
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import Iterable, NamedTuple
 
 import numpy as np
+
+# Keywords the decoder is trained to emit; anything else counts as "benign".
+LABEL_WORDS = {"anomalous": 1, "normal": 0}
+
 
 
 # --------------------------------------------------------------------------- #
@@ -56,5 +60,25 @@ class Tally(NamedTuple):
             "f1": self.f1,
             "accuracy": self.accuracy,
         }
+
+
+# --------------------------------------------------------------------------- #
+# Decoding the model's free-text answers
+# --------------------------------------------------------------------------- #
+def first_label_word(answer: str) -> str | None:
+    """Return the earliest label keyword found in `answer`, ignoring case."""
+    lowered = answer.lower()
+    hits = [(lowered.find(word), word) for word in LABEL_WORDS if word in lowered]
+    return min(hits)[1] if hits else None
+
+
+def answers_to_flags(answers: Iterable[str], unreadable: list[str]) -> list[int]:
+    flags = []
+    for answer in answers:
+        word = first_label_word(answer)
+        if word is None:
+            unreadable.append(answer)
+        flags.append(LABEL_WORDS.get(word, 0))
+    return flags
 
 
